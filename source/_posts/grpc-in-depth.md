@@ -3,31 +3,41 @@ title: Grpc详解
 ---
 
 # RPC框架的选择
-	常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、Grpc等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。
-	框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概可以至少保证每两到三个月可以有一次小版本的更新）可以保证各种问题早已暴露并修复，让我们可以更专注于我们自己的项目本身，而不是要担心究竟是我们自己的代码有问题还是框架本身就有问题。
-	重量级RPC框架有一个主要问题就是结构复杂，另外主语言之外的代码质量也不太容易保证。个人认为这些重型RPC框架如果想要成功需要有一个活跃的社区，以及一个活跃的开源管理团队。比如我们项目组试用过腾讯的Tars，C++同学表示没有任何问题，然后JAVA同学表示java版本的各种bug，提了好多Bug修改请求至今还挂在github上，而这个项目已经快两年没更新了。	
-	轻量级rpc框架中，restful可以被视作标杆。由于restful基于http协议，天然被各种框架支持，而且非常灵活。restful的缺点有两方面，一是过于灵活，缺少根据协议生成服务端和客户端代码的工具，联调往往要花更多的时间；二是大部分序列化基于json或者xml，相对来讲效率不理想。和restful相比，很多轻量级框架都有这样或者那样的缺点，有的缺少跨语言支持（rmi），有的很繁琐（webservice）。个人认为其中相对理想的是Grpc和Thrift。
+
+>常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、Grpc等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。
+	
+>框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概可以至少保证每两到三个月可以有一次小版本的更新）可以保证各种问题早已暴露并修复，让我们可以更专注于我们自己的项目本身，而不是要担心究竟是我们自己的代码有问题还是框架本身就有问题。
+	
+>重量级RPC框架有一个主要问题就是结构复杂，另外主语言之外的代码质量也不太容易保证。个人认为这些重型RPC框架如果想要成功需要有一个活跃的社区，以及一个活跃的开源管理团队。比如我们项目组试用过腾讯的Tars，C++同学表示没有任何问题，然后JAVA同学表示java版本的各种bug，提了好多Bug修改请求至今还挂在github上，而这个项目已经快两年没更新了。
+	
+>轻量级rpc框架中，restful可以被视作标杆。由于restful基于http协议，天然被各种框架支持，而且非常灵活。restful的缺点有两方面，一是过于灵活，缺少根据协议生成服务端和客户端代码的工具，联调往往要花更多的时间；二是大部分序列化基于json或者xml，相对来讲效率不理想。和restful相比，很多轻量级框架都有这样或者那样的缺点，有的缺少跨语言支持（rmi），有的很繁琐（webservice）。个人认为其中相对理想的是Grpc和Thrift。
 
 ## Grpc简介
-	Protobuf是一种google推出的非常流行的跨语言序列化/反序列化框架。在Protobuf2中就已经出现了用rpc定义服务的概念，但是一直缺少一种流行的rpc框架支持。当Http2推出之后，google将Http2和protobuf3结合，推出了Grpc。Grpc继承了Protobuf和Http2的优点，包括：
-	* 序列化反序列化性能好
-	* 强类型支持
-	* 向前/向后兼容
-	* 有代码生成机制，而且可以支持多语言
-	* 长连接、多路复用
-	同时Grpc还提供了简单地服务发现和负载均衡功能。虽然这并不是Grpc框架的重点，但是开发者可以非常容易的自己扩展Grpc这些功能，实现自己的策略或应用最新的相关方面技术，而不用像重型Rpc框架一样受制于框架本身是否支持。
+
+>Protobuf是一种google推出的非常流行的跨语言序列化/反序列化框架。在Protobuf2中就已经出现了用rpc定义服务的概念，但是一直缺少一种流行的rpc框架支持。当Http2推出之后，google将Http2和protobuf3结合，推出了Grpc。Grpc继承了Protobuf和Http2的优点，包括：
+* 序列化反序列化性能好
+* 强类型支持
+* 向前/向后兼容
+* 有代码生成机制，而且可以支持多语言
+* 长连接、多路复用
+
+>同时Grpc还提供了简单地服务发现和负载均衡功能。虽然这并不是Grpc框架的重点，但是开发者可以非常容易的自己扩展Grpc这些功能，实现自己的策略或应用最新的相关方面技术，而不用像重型Rpc框架一样受制于框架本身是否支持。
 
 ## Grpc与Thrift对比
-	Thrift是Facebook推出的一种RPC框架，从性能上来讲远优于Grpc。但是在实际调研时发现有一个很麻烦的问题：Thrift的客户端是**线程不安全**的——这意味着在Spring中无法以单例形式注入到Bean中。解决方案有三种：
-	1.每次调用创建一个Thrift客户端。这不仅意味着额外的对象创建和垃圾回收开销，而且实际上相当于只使用了短链接，这是一个开发复杂度最低但是从性能上来讲最差的解决方案。
-	2.利用Pool，稍微复杂一点的解决方案，但是也非常成熟。但是问题在于一来要实现服务发现和负载均衡恐怕需要很多额外开发；二来恐怕要创建Pool数量\*服务端数量个客户端，内存开销会比较大。
-	3.使用异步框架如Netty，可以成功避免创建过多的客户端，但是仍要自己实现服务发现和负载均衡，相对复杂。实际上Facebook有一个基于Netty的Thrift客户端，叫Nifty，但是快四年没更新了。。。
-	相比较而言Grpc就友好多了，本身有简单而且可扩展的服务发现和负载均衡功能，底层基于Netty所以线程安全，在不需要极限压榨性能的情况下是非常好的选择。当然如果需要极限压榨性能Thrift也未必够看。
+
+>Thrift是Facebook推出的一种RPC框架，从性能上来讲远优于Grpc。但是在实际调研时发现有一个很麻烦的问题：Thrift的客户端是**线程不安全**的——这意味着在Spring中无法以单例形式注入到Bean中。解决方案有三种：
+1.每次调用创建一个Thrift客户端。这不仅意味着额外的对象创建和垃圾回收开销，而且实际上相当于只使用了短链接，这是一个开发复杂度最低但是从性能上来讲最差的解决方案。
+2.利用Pool，稍微复杂一点的解决方案，但是也非常成熟。但是问题在于一来要实现服务发现和负载均衡恐怕需要很多额外开发；二来恐怕要创建Pool数量\*服务端数量个客户端，内存开销会比较大。
+3.使用异步框架如Netty，可以成功避免创建过多的客户端，但是仍要自己实现服务发现和负载均衡，相对复杂。实际上Facebook有一个基于Netty的Thrift客户端，叫Nifty，但是快四年没更新了。。。
+
+>相比较而言Grpc就友好多了，本身有简单而且可扩展的服务发现和负载均衡功能，底层基于Netty所以线程安全，在不需要极限压榨性能的情况下是非常好的选择。当然如果需要极限压榨性能Thrift也未必够看。
 
 # Grpc入门
 
 ## Grpc服务定义
-	Grpc中有一个特殊的关键字**stream**，表示可以以流式输入或输出多个protobuf对象。注意只有异步非阻塞的客户端支持以stream形式输入，同步阻塞客户端不支持以stream形式输入。
+
+>Grpc中有一个特殊的关键字**stream**，表示可以以流式输入或输出多个protobuf对象。注意只有异步非阻塞的客户端支持以stream形式输入，同步阻塞客户端不支持以stream形式输入。
+
 ```
 syntax = "proto3";  //GRPC必须使用proto3
 
@@ -64,7 +74,9 @@ message RouteSummary {
 ```
 
 ## 依赖和代码生成
-	由于protoc的Grpc插件需要自己编译，而且存在环境问题。推荐使用gradle或者maven的protobuf插件。实例项目使用了gradle，根目录build.gradle配置如下:
+
+>由于protoc的Grpc插件需要自己编译，而且存在环境问题。推荐使用gradle或者maven的protobuf插件。实例项目使用了gradle，根目录build.gradle配置如下:
+
 ```
 plugins {
 	id 'java'
@@ -112,7 +124,9 @@ subprojects{
 	}
 }
 ```
-	子项目build.gradle如下：
+
+>子项目build.gradle如下：
+
 ```
 plugins{
     id 'com.google.protobuf' version '0.8.10'   //引入protobuf插件
@@ -148,14 +162,17 @@ protobuf {
     }
 }
 ```
-	我们的入门子项目名称叫做starter，配置好build.gradle之后，执行gradlew :starter:generateProto就可以在src/main/java下生成对应的文件：
-	![grpc生成的目录结构](grpc-in-depth/starter-genenate-grpc.png)
+
+>我们的入门子项目名称叫做starter，配置好build.gradle之后，执行gradlew :starter:generateProto就可以在src/main/java下生成对应的文件：
+![grpc生成的目录结构](grpc-in-depth/starter-genenate-grpc.png)
 ## 服务端
-	无论客户端以异步非阻塞还是同步阻塞形式调用，Grpc服务端的返回都是以异步形式返回。对于异步的请求或者返回，都需要实现Grpc的`io.grpc.stub.StreamObserver`接口。接口有三个方法：
-	+ `onNext`:表示接收/发送一个对象
-	+ `onError`:处理异常
-	+ `onCompleted`:表示请求或返回结束
-	当请求来到服务端端时，会异步调用requestObserver的onNext方法，直到结束时调用requestObserver的onCompleted方法；服务端调用responseObserver的onNext把结果返回给客户端，直到调用responseObserver的onCompleted方法通知客户端返回结束。服务端代码如下：
+
+>无论客户端以异步非阻塞还是同步阻塞形式调用，Grpc服务端的返回都是以异步形式返回。对于异步的请求或者返回，都需要实现Grpc的`io.grpc.stub.StreamObserver`接口。接口有三个方法：
++ `onNext`:表示接收/发送一个对象
++ `onError`:处理异常
++ `onCompleted`:表示请求或返回结束
+
+>当请求来到服务端端时，会异步调用requestObserver的onNext方法，直到结束时调用requestObserver的onCompleted方法；服务端调用responseObserver的onNext把结果返回给客户端，直到调用responseObserver的onCompleted方法通知客户端返回结束。服务端代码如下：
 ```
 import cn.lmh.examples.grpc.proto.*;
 import io.grpc.Server;
