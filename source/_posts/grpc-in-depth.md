@@ -435,7 +435,7 @@ public class RouteGuideClient {
 前文的入门示例客户端中直接写了host和port，那么不免让人产生疑问，如果有多个可以提供服务的Server如何处理。如前文的客户端示例所示，客户端的创建依赖于`io.grpc.ManagedChannel`，而`io.grpc.ManagedChannel`依赖于`io.grpc.ManagedChannelBuilder`。在`io.grpc.ManagedChannelBuilder`中有两个方法,`forTarget`和`nameResolverFactory`，二者配合使用可以发现服务端。
 
 ### `forTarget`方法
-`forTarget`方法可以把一个url赋值给`io.grpc.ManagedChannelBuilder`内部的`target`变量。
+感觉Grpc这里设计比较繁琐。`forTarget`方法的实际功能**是把一个url赋值给`io.grpc.ManagedChannelBuilder`内部的`target`变量**，但是过程比较绕。
 ```
 /**
    * Creates a channel with a target string, which can be either a valid {@link
@@ -492,6 +492,106 @@ protected AbstractManagedChannelImplBuilder(String target) {
   }
 ```
 ### `nameResolverFactory`方法
+这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolve.Factory`实现的话会使用用户的`io.grpc.NameResolve.Factroy`实现，否则会使用`io.grpc.NameResolverRegistry`的默认实现。
+```
+final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
+
+@Override
+  public final T nameResolverFactory(NameResolver.Factory resolverFactory) {
+    Preconditions.checkState(directServerAddress == null,
+        "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
+        directServerAddress);
+    if (resolverFactory != null) {
+      this.nameResolverFactory = resolverFactory;
+    } else {
+      this.nameResolverFactory = nameResolverRegistry.asFactory();
+    }
+    return thisT();
+  }
+```
+`io.grpc.NameResolverRegistry`会通过硬编码加载`io.grpc.NameResolverProvider`实现，并创建一个与之有关的`io.grpc.NameResolve.Factory`的实现。目前硬编码加载的`io.grpc.NameResolverProvider`实现只有`io.grpc.internal.DnsNameResolverProvider`一种。
+```
+private static NameResolverRegistry instance;
+private final NameResolver.Factory factory = new NameResolverFactory();
+@GuardedBy("this")
+private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
+
+private synchronized void addProvider(NameResolverProvider provider) {
+    checkArgument(provider.isAvailable(), "isAvailable() returned false");
+    allProviders.add(provider);
+  }
+/**
+   * Returns the default registry that loads providers via the Java service loader mechanism.
+   */
+  public static synchronized NameResolverRegistry getDefaultRegistry() {
+    if (instance == null) {
+      List<NameResolverProvider> providerList = ServiceProviders.loadAll(
+          NameResolverProvider.class,
+          getHardCodedClasses(),
+          NameResolverProvider.class.getClassLoader(),
+          new NameResolverPriorityAccessor());
+      if (providerList.isEmpty()) {
+        logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
+            + "is probably due to a broken build. If using ProGuard, check your configuration");
+      }
+      instance = new NameResolverRegistry();
+      for (NameResolverProvider provider : providerList) {
+        logger.fine("Service loader found " + provider);
+        if (provider.isAvailable()) {
+          instance.addProvider(provider);
+        }
+      }
+      instance.refreshProviders();
+    }
+    return instance;
+  }
+  
+
+  public NameResolver.Factory asFactory() {
+    return factory;
+  }
+
+  @VisibleForTesting
+  static List<Class<?>> getHardCodedClasses() {
+    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
+    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
+    // https://sourceforge.net/p/proguard/bugs/418/
+    ArrayList<Class<?>> list = new ArrayList<>();
+    try {
+      list.add(Class.forName("io.grpc.internal.DnsNameResolverProvider"));
+    } catch (ClassNotFoundException e) {
+      logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
+    }
+    return Collections.unmodifiableList(list);
+  }
+
+  private final class NameResolverFactory extends NameResolver.Factory {
+    @Override
+    @Nullable
+    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+      List<NameResolverProvider> providers = providers();
+      for (NameResolverProvider provider : providers) {
+        NameResolver resolver = provider.newNameResolver(targetUri, args);
+        if (resolver != null) {
+          return resolver;
+        }
+      }
+      return null;
+    }
+
+    @Override
+    public String getDefaultScheme() {
+      List<NameResolverProvider> providers = providers();
+      if (providers.isEmpty()) {
+        return "unknown";
+      }
+      return providers.get(0).getDefaultScheme();
+    }
+  }
+```
+### `ManagedChannel.builder()`方法
+
+### 自定义`NameResolver.Factory`实现
 
 ### 服务健康状态检查
 
