@@ -425,8 +425,76 @@ public class RouteGuideClient {
 
 # GRPC代码详解
 
-## 服务发现
+鉴于整个Grpc的代码还是比较多的，本文将专注于以下问题：
+1.究竟有哪些可用的Server可以提供服务？
+2.究竟应该在这些可用的服务端中选择哪个Server？
+3.Client与Server之间是如何通信的？
 
-## 链路选择
+## 发现服务端
+
+前文的入门示例客户端中直接写了host和port，那么不免让人产生疑问，如果有多个可以提供服务的Server如何处理。如前文的客户端示例所示，客户端的创建依赖于`io.grpc.ManagedChannel`，而`io.grpc.ManagedChannel`依赖于`io.grpc.ManagedChannelBuilder`。在`io.grpc.ManagedChannelBuilder`中有两个方法,`forTarget`和`nameResolverFactory`，二者配合使用可以发现服务端。
+
+### `forTarget`方法
+`forTarget`方法可以把一个url赋值给`io.grpc.ManagedChannelBuilder`内部的`target`变量。
+```
+/**
+   * Creates a channel with a target string, which can be either a valid {@link
+   * NameResolver}-compliant URI, or an authority string.
+   *
+   */
+  public static ManagedChannelBuilder<?> forTarget(String target) {
+    return ManagedChannelProvider.provider().builderForTarget(target);
+  }
+```
+`io.grpc.ManagedChannelProvider.provider()`会返回一个`io.grpc.ManagedChannelProvider`实现，然后会调用这个实现的`buildForTarget`方法。有哪些`io.grpc.ManagedChannelProvider`实现是在`io.grpc.ManagedChannelProvider`中以硬编码实现的。
+```
+private static final class HardcodedClasses implements Iterable<Class<?>> {
+    @Override
+    public Iterator<Class<?>> iterator() {
+      List<Class<?>> list = new ArrayList<>();
+      try {
+        list.add(Class.forName("io.grpc.okhttp.OkHttpChannelProvider"));
+      } catch (ClassNotFoundException ex) {
+        // ignore
+      }
+      try {
+        list.add(Class.forName("io.grpc.netty.NettyChannelProvider"));
+      } catch (ClassNotFoundException ex) {
+        // ignore
+      }
+      return list.iterator();
+    }
+  }
+```
+实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。因为我们配置里配置的是netty实现,所以就只分析netty实现，okhttp里的实现也是类似的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
+```
+public NettyChannelBuilder builderForTarget(String target) {
+    return NettyChannelBuilder.forTarget(target);
+}
+```
+而`io.grpc.netty.NettyChannelBuilder`继承自`io.grpc.internal.AbstractManagedChannelImplBuilder`，`forTarget`方法实际上调用了父类的构造函数。
+```
+@CheckReturnValue
+  NettyChannelBuilder(String target) {
+    super(target);
+  }
+
+@CheckReturnValue
+  public static NettyChannelBuilder forTarget(String target) {
+    return new NettyChannelBuilder(target);
+  }
+```
+`io.grpc.internal.AbstractManagedChannelImplBuilder`的构造函数主要作用是把参数赋值给`target`变量。
+```
+protected AbstractManagedChannelImplBuilder(String target) {
+    this.target = Preconditions.checkNotNull(target, "target");
+    this.directServerAddress = null;
+  }
+```
+### `nameResolverFactory`方法
+
+### 服务健康状态检查
+
+## 负载均衡
 
 ## 通信
