@@ -589,12 +589,660 @@ private synchronized void addProvider(NameResolverProvider provider) {
     }
   }
 ```
-### `ManagedChannel.builder()`方法
+`getDefaultSchema`会匹配`target`中的schema（如http），如果匹配的上，就使用相应的`NameResolver.Factory`，返回`NameResolver`决定真正的服务访问地址。
+### `io.grpc.NameResolver`
+我们来看`io.grpc.NameResolver`
+```
+public abstract class NameResolver {
+  /**
+   * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
+   * from a trusted source, because if the authority is tampered with, RPCs may be sent to the
+   * attackers which may leak sensitive user data.
+   *
+   * <p>An implementation must generate it without blocking, typically in line, and
+   * <strong>must</strong> keep it unchanged. {@code NameResolver}s created from the same factory
+   * with the same argument must return the same authority.
+   *
+   * @since 1.0.0
+   */
+  public abstract String getServiceAuthority();
 
-### 自定义`NameResolver.Factory`实现
+  /**
+   * Starts the resolution.
+   *
+   * @param listener used to receive updates on the target
+   * @since 1.0.0
+   */
+  public void start(final Listener listener) {
+    if (listener instanceof Listener2) {
+      start((Listener2) listener);
+    } else {
+      start(new Listener2() {
+          @Override
+          public void onError(Status error) {
+            listener.onError(error);
+          }
 
-### 服务健康状态检查
+          @Override
+          public void onResult(ResolutionResult resolutionResult) {
+            listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
+          }
+      });
+    }
+  }
+
+  /**
+   * Starts the resolution.
+   *
+   * @param listener used to receive updates on the target
+   * @since 1.21.0
+   */
+  public void start(Listener2 listener) {
+    start((Listener) listener);
+  }
+
+  /**
+   * Stops the resolution. Updates to the Listener will stop.
+   *
+   * @since 1.0.0
+   */
+  public abstract void shutdown();
+
+  /**
+   * Re-resolve the name.
+   *
+   * <p>Can only be called after {@link #start} has been called.
+   *
+   * <p>This is only a hint. Implementation takes it as a signal but may not start resolution
+   * immediately. It should never throw.
+   *
+   * <p>The default implementation is no-op.
+   *
+   * @since 1.0.0
+   */
+  public void refresh() {}
+
+  /**
+   * Receives address updates.
+   *
+   * <p>All methods are expected to return quickly.
+   *
+   * @since 1.0.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  @ThreadSafe
+  public interface Listener {
+    /**
+     * Handles updates on resolved addresses and attributes.
+     *
+     * <p>Implementations will not modify the given {@code servers}.
+     *
+     * @param servers the resolved server addresses. An empty list will trigger {@link #onError}
+     * @param attributes extra information from naming system.
+     * @since 1.3.0
+     */
+    void onAddresses(
+        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes);
+
+    /**
+     * Handles an error from the resolver. The listener is responsible for eventually invoking
+     * {@link #refresh()} to re-attempt resolution.
+     *
+     * @param error a non-OK status
+     * @since 1.0.0
+     */
+    void onError(Status error);
+  }
+
+  /**
+   * Receives address updates.
+   *
+   * <p>All methods are expected to return quickly.
+   *
+   * <p>This is a replacement API of {@code Listener}. However, we think this new API may change
+   * again, so we aren't yet encouraging mass-migration to it. It is fine to use and works.
+   *
+   * @since 1.21.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public abstract static class Listener2 implements Listener {
+    /**
+     * @deprecated This will be removed in 1.22.0
+     */
+    @Override
+    @Deprecated
+    public final void onAddresses(
+        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+      onResult(
+          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+    }
+
+    /**
+     * Handles updates on resolved addresses and attributes.  If
+     * {@link ResolutionResult#getAddresses()} is empty, {@link #onError(Status)} will be called.
+     *
+     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
+     * @since 1.21.0
+     */
+    public abstract void onResult(ResolutionResult resolutionResult);
+
+    /**
+     * Handles an error from the resolver. The listener is responsible for eventually invoking
+     * {@link NameResolver#refresh()} to re-attempt resolution.
+     *
+     * @param error a non-OK status
+     * @since 1.21.0
+     */
+    @Override
+    public abstract void onError(Status error);
+  }
+
+  /**
+   * Represents the results from a Name Resolver.
+   *
+   * @since 1.21.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public static final class ResolutionResult {
+    private final List<EquivalentAddressGroup> addresses;
+    @ResolutionResultAttr
+    private final Attributes attributes;
+    @Nullable
+    private final ConfigOrError serviceConfig;
+
+    ResolutionResult(
+        List<EquivalentAddressGroup> addresses,
+        @ResolutionResultAttr Attributes attributes,
+        ConfigOrError serviceConfig) {
+      this.addresses = Collections.unmodifiableList(new ArrayList<>(addresses));
+      this.attributes = checkNotNull(attributes, "attributes");
+      this.serviceConfig = serviceConfig;
+    }
+
+    /**
+     * Constructs a new builder of a name resolution result.
+     *
+     * @since 1.21.0
+     */
+    public static Builder newBuilder() {
+      return new Builder();
+    }
+
+    /**
+     * Converts these results back to a builder.
+     *
+     * @since 1.21.0
+     */
+    public Builder toBuilder() {
+      return newBuilder()
+          .setAddresses(addresses)
+          .setAttributes(attributes)
+          .setServiceConfig(serviceConfig);
+    }
+
+    /**
+     * Gets the addresses resolved by name resolution.
+     *
+     * @since 1.21.0
+     */
+    public List<EquivalentAddressGroup> getAddresses() {
+      return addresses;
+    }
+
+    /**
+     * Gets the attributes associated with the addresses resolved by name resolution.  If there are
+     * no attributes, {@link Attributes#EMPTY} will be returned.
+     *
+     * @since 1.21.0
+     */
+    @ResolutionResultAttr
+    public Attributes getAttributes() {
+      return attributes;
+    }
+
+    /**
+     * Gets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+     *
+     * @since 1.21.0
+     */
+    @Nullable
+    public ConfigOrError getServiceConfig() {
+      return serviceConfig;
+    }
+
+    @Override
+    public String toString() {
+      return MoreObjects.toStringHelper(this)
+          .add("addresses", addresses)
+          .add("attributes", attributes)
+          .add("serviceConfig", serviceConfig)
+          .toString();
+    }
+
+    /**
+     * Useful for testing.  May be slow to calculate.
+     */
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof ResolutionResult)) {
+        return false;
+      }
+      ResolutionResult that = (ResolutionResult) obj;
+      return Objects.equal(this.addresses, that.addresses)
+          && Objects.equal(this.attributes, that.attributes)
+          && Objects.equal(this.serviceConfig, that.serviceConfig);
+    }
+
+    /**
+     * Useful for testing.  May be slow to calculate.
+     */
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(addresses, attributes, serviceConfig);
+    }
+
+    /**
+     * A builder for {@link ResolutionResult}.
+     *
+     * @since 1.21.0
+     */
+    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+    public static final class Builder {
+      private List<EquivalentAddressGroup> addresses = Collections.emptyList();
+      private Attributes attributes = Attributes.EMPTY;
+      @Nullable
+      private ConfigOrError serviceConfig;
+      //  Make sure to update #toBuilder above!
+
+      Builder() {}
+
+      /**
+       * Sets the addresses resolved by name resolution.  This field is required.
+       *
+       * @since 1.21.0
+       */
+      public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
+        this.addresses = addresses;
+        return this;
+      }
+
+      /**
+       * Sets the attributes for the addresses resolved by name resolution.  If unset,
+       * {@link Attributes#EMPTY} will be used as a default.
+       *
+       * @since 1.21.0
+       */
+      public Builder setAttributes(Attributes attributes) {
+        this.attributes = attributes;
+        return this;
+      }
+
+      /**
+       * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
+       * This field is optional.
+       *
+       * @since 1.21.0
+       */
+      public Builder setServiceConfig(@Nullable ConfigOrError serviceConfig) {
+        this.serviceConfig = serviceConfig;
+        return this;
+      }
+
+      /**
+       * Constructs a new {@link ResolutionResult} from this builder.
+       *
+       * @since 1.21.0
+       */
+      public ResolutionResult build() {
+        return new ResolutionResult(addresses, attributes, serviceConfig);
+      }
+    }
+  }
+  
+  /**
+   * Gets the attributes associated with the addresses resolved by name resolution.  If there are
+   * no attributes, {@link Attributes#EMPTY} will be returned.
+   *
+   * @since 1.21.0
+   */
+  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+  public static final class ConfigOrError {
+
+    /**
+     * Returns a {@link ConfigOrError} for the successfully parsed config.
+     */
+    public static ConfigOrError fromConfig(Object config) {
+      return new ConfigOrError(config);
+    }
+
+    /**
+     * Returns a {@link ConfigOrError} for the failure to parse the config.
+     *
+     * @param status a non-OK status
+     */
+    public static ConfigOrError fromError(Status status) {
+      return new ConfigOrError(status);
+    }
+
+    private final Status status;
+    private final Object config;
+
+    private ConfigOrError(Object config) {
+      this.config = checkNotNull(config, "config");
+      this.status = null;
+    }
+
+    private ConfigOrError(Status status) {
+      this.config = null;
+      this.status = checkNotNull(status, "status");
+      checkArgument(!status.isOk(), "cannot use OK status: %s", status);
+    }
+
+    /**
+     * Returns config if exists, otherwise null.
+     */
+    @Nullable
+    public Object getConfig() {
+      return config;
+    }
+
+    /**
+     * Returns error status if exists, otherwise null.
+     */
+    @Nullable
+    public Status getError() {
+      return status;
+    }
+
+    @Override
+    public String toString() {
+      if (config != null) {
+        return MoreObjects.toStringHelper(this)
+            .add("config", config)
+            .toString();
+      } else {
+        assert status != null;
+        return MoreObjects.toStringHelper(this)
+            .add("error", status)
+            .toString();
+      }
+    }
+  }
+}
+```
+在客户端启动的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。`Listener`可以接收服务端地址，用来返回真实的服务地址。
+###`io.grpc.internal.DnsNameResolver`
+由于Grpc支持长连接，所以如果直连的话只会访问一个域名下的一台服务器，即首次连接时通过DNS返回IP地址。`io.grpc.internal.DnsNameResolverProvider`是对`io.grpc.internal.DnsNameResolver`的简单封装，只支持以`dns://`开头的地址。`io.grpc.internal.DnsNameResolver`会根据`target`获取该host下所有关联的IP，即通过DNS解析出所有的服务端IP地址。
+```
+public final class DnsNameResolverProvider extends NameResolverProvider {
+
+  private static final String SCHEME = "dns";
+
+  @Override
+  public DnsNameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+    if (SCHEME.equals(targetUri.getScheme())) {
+      String targetPath = Preconditions.checkNotNull(targetUri.getPath(), "targetPath");
+      Preconditions.checkArgument(targetPath.startsWith("/"),
+          "the path component (%s) of the target (%s) must start with '/'", targetPath, targetUri);
+      String name = targetPath.substring(1);
+      return new DnsNameResolver(
+          targetUri.getAuthority(),
+          name,
+          args,
+          GrpcUtil.SHARED_CHANNEL_EXECUTOR,
+          Stopwatch.createUnstarted(),
+          InternalServiceProviders.isAndroid(getClass().getClassLoader()));
+    } else {
+      return null;
+    }
+  }
+
+  @Override
+  public String getDefaultScheme() {
+    return SCHEME;
+  }
+
+  @Override
+  protected boolean isAvailable() {
+    return true;
+  }
+
+  @Override
+  protected int priority() {
+    return 5;
+  }
+}
+```
+可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是使用执行了一个继承自`Runnable`的`Resolve`接口。
+```
+@Override
+public void start(Listener2 listener) {
+Preconditions.checkState(this.listener == null, "already started");
+executor = SharedResourceHolder.get(executorResource);
+this.listener = Preconditions.checkNotNull(listener, "listener");
+resolve();
+}
+
+@Override
+public void refresh() {
+Preconditions.checkState(listener != null, "not started");
+resolve();
+}
+private void resolve() {
+if (resolving || shutdown || !cacheRefreshRequired()) {
+  return;
+}
+resolving = true;
+executor.execute(new Resolve(listener));
+}
+private final class Resolve implements Runnable {
+    private final Listener2 savedListener;
+
+    Resolve(Listener2 savedListener) {
+      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
+    }
+
+    @Override
+    public void run() {
+      if (logger.isLoggable(Level.FINER)) {
+        logger.finer("Attempting DNS resolution of " + host);
+      }
+      try {
+        resolveInternal();
+      } finally {
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              resolving = false;
+            }
+          });
+      }
+    }
+
+    @VisibleForTesting
+    void resolveInternal() {
+      InetSocketAddress destination =
+          InetSocketAddress.createUnresolved(host, port);
+      ProxiedSocketAddress proxiedAddr;
+      try {
+        proxiedAddr = proxyDetector.proxyFor(destination);
+      } catch (IOException e) {
+        savedListener.onError(
+            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+        return;
+      }
+      if (proxiedAddr != null) {
+        if (logger.isLoggable(Level.FINER)) {
+          logger.finer("Using proxy address " + proxiedAddr);
+        }
+        EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
+        ResolutionResult resolutionResult =
+            ResolutionResult.newBuilder()
+                .setAddresses(Collections.singletonList(server))
+                .setAttributes(Attributes.EMPTY)
+                .build();
+        savedListener.onResult(resolutionResult);
+        return;
+      }
+
+      ResolutionResults resolutionResults;
+      try {
+        ResourceResolver resourceResolver = null;
+        if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+          resourceResolver = getResourceResolver();
+        }
+        final ResolutionResults results = resolveAll(
+            addressResolver,
+            resourceResolver,
+            enableSrv,
+            enableTxt,
+            host);
+        resolutionResults = results;
+        syncContext.execute(new Runnable() {
+            @Override
+            public void run() {
+              cachedResolutionResults = results;
+              if (cacheTtlNanos > 0) {
+                stopwatch.reset().start();
+              }
+            }
+          });
+        if (logger.isLoggable(Level.FINER)) {
+          logger.finer("Found DNS results " + resolutionResults + " for " + host);
+        }
+      } catch (Exception e) {
+        savedListener.onError(
+            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+        return;
+      }
+      // Each address forms an EAG
+      List<EquivalentAddressGroup> servers = new ArrayList<>();
+      for (InetAddress inetAddr : resolutionResults.addresses) {
+        servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
+      }
+      servers.addAll(resolutionResults.balancerAddresses);
+      if (servers.isEmpty()) {
+        savedListener.onError(Status.UNAVAILABLE.withDescription(
+            "No DNS backend or balancer addresses found for " + host));
+        return;
+      }
+
+      Attributes.Builder attrs = Attributes.newBuilder();
+      if (!resolutionResults.txtRecords.isEmpty()) {
+        ConfigOrError serviceConfig =
+            parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
+        if (serviceConfig != null) {
+          if (serviceConfig.getError() != null) {
+            savedListener.onError(serviceConfig.getError());
+            return;
+          } else {
+            @SuppressWarnings("unchecked")
+            Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
+            attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
+          }
+        }
+      } else {
+        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
+      }
+      ResolutionResult resolutionResult =
+          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
+      savedListener.onResult(resolutionResult);
+    }
+  }
+```  
+在有代理的情况下，`Resolve`的`resolveInternal`会根据代理返回的`ProxiedSocketAddress`创建`EquivalentAddressGroup`作为服务端列表返回，并设置空config；否则会调用`resolveAll`方法获取服务端列表，并调用`parseServiceConfig`方法设置config。`resolveAll`方法返回的`ResolutionResults`有三个变量`addresses`、`txtRecords`和`balancerAddresses`。
+```
+@VisibleForTesting
+  static ResolutionResults resolveAll(
+      AddressResolver addressResolver,
+      @Nullable ResourceResolver resourceResolver,
+      boolean requestSrvRecords,
+      boolean requestTxtRecords,
+      String name) {
+    List<? extends InetAddress> addresses = Collections.emptyList();
+    Exception addressesException = null;
+    List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
+    Exception balancerAddressesException = null;
+    List<String> txtRecords = Collections.emptyList();
+    Exception txtRecordsException = null;
+
+    try {
+      addresses = addressResolver.resolveAddress(name);
+    } catch (Exception e) {
+      addressesException = e;
+    }
+    if (resourceResolver != null) {
+      if (requestSrvRecords) {
+        try {
+          balancerAddresses =
+              resourceResolver.resolveSrv(addressResolver, GRPCLB_NAME_PREFIX + name);
+        } catch (Exception e) {
+          balancerAddressesException = e;
+        }
+      }
+      if (requestTxtRecords) {
+        boolean balancerLookupFailedOrNotAttempted =
+            !requestSrvRecords || balancerAddressesException != null;
+        boolean dontResolveTxt =
+            (addressesException != null) && balancerLookupFailedOrNotAttempted;
+        // Only do the TXT record lookup if one of the above address resolutions succeeded.
+        if (!dontResolveTxt) {
+          try {
+            txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + name);
+          } catch (Exception e) {
+            txtRecordsException = e;
+          }
+        }
+      }
+    }
+    try {
+      if (addressesException != null
+          && (balancerAddressesException != null || balancerAddresses.isEmpty())) {
+        Throwables.throwIfUnchecked(addressesException);
+        throw new RuntimeException(addressesException);
+      }
+    } finally {
+      if (addressesException != null) {
+        logger.log(Level.FINE, "Address resolution failure", addressesException);
+      }
+      if (balancerAddressesException != null) {
+        logger.log(Level.FINE, "Balancer resolution failure", balancerAddressesException);
+      }
+      if (txtRecordsException != null) {
+        logger.log(Level.FINE, "ServiceConfig resolution failure", txtRecordsException);
+      }
+    }
+    return new ResolutionResults(addresses, txtRecords, balancerAddresses);
+  }
+```
+`addressResolver`的`resolveAddress`方法实际是调用JDK的`java.net.InetAddress`的`getAllByName`方法，即根据host通过DNS返回一系列服务端列表。`resourceResolver`根据LDAP协议获取指定命名空间下的服务端列表地址。`txtRecords`和`balancerAddresses`是和LDAP相关的参数，方法入参`requestSrvRecords`和`requestTxtRecords`的默认值都是false。由于LDAP不是特别常用，这里就不深入展开了。
+
+
+### 自定义基于Euraka的`NameResolver.Factory`实现
 
 ## 负载均衡
+
+`io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡的具体实现`io.grpc.LoadBalancer`。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
+`io.grpc.LoadBalancer`的核心逻辑实际在`SubchannelPicker`中，`SubchannelPicker`中的`pickSubchannel`方法会返回选择的结果。
+GRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin`。前者总会使用第一个可用的服务端，后者则是简单轮询。
+
+### GRPC的简单轮询负载均衡实现
+
+当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。在简单轮询`io.grpc.util.RoundRobinLoadBalancer`中，更新完服务端列表后，会调用`updateBalancingState`方法更新`SubchannelPicker`的实现`ReadyPicker`。`ReadyPicker`的`pickSubchannel`实际上是调用其私有方法`nextSubchannel`决定subchannel。可以看到定义了一个`AtomicInteger`类型的变量`indexUpdater`，每次进行选择自增一次，直到超出最大长度取余并复位。
+```
+private Subchannel nextSubchannel() {
+      int size = list.size();
+      int i = indexUpdater.incrementAndGet(this);
+      if (i >= size) {
+        int oldi = i;
+        i %= size;
+        indexUpdater.compareAndSet(this, oldi, i);
+      }
+      return list.get(i);
+    }
+```
+
+### 自定义加权随机负载均衡实现
+
 
 ## 通信
