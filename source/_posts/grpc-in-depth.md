@@ -29,6 +29,7 @@ Thrift是Facebook推出的一种RPC框架，从性能上来讲远优于gRPC。�
 1. 每次调用创建一个Thrift客户端。这不仅意味着额外的对象创建和垃圾回收开销，而且实际上相当于只使用了短链接，这是一个开发复杂度最低但是从性能上来讲最差的解决方案。
 2. 利用Pool，稍微复杂一点的解决方案，但是也非常成熟。但是问题在于一来要实现服务发现和负载均衡恐怕需要很多额外开发；二来恐怕要创建Pool数量\*服务端数量个客户端，内存开销会比较大。
 3. 使用异步框架如Netty，可以成功避免创建过多的客户端，但是仍要自己实现服务发现和负载均衡，相对复杂。实际上Facebook有一个基于Netty的Thrift客户端，叫Nifty，但是快四年没更新了。。。
+
 相比较而言gRPC就友好多了，本身有简单而且可扩展的服务发现和负载均衡功能，底层基于Netty所以线程安全，在不需要极限压榨性能的情况下是非常好的选择。当然如果需要极限压榨性能Thrift也未必够看。
 
 # gRPC入门
@@ -74,7 +75,7 @@ message RouteSummary {
 
 ## 依赖和代码生成
 
-由于protoc的gRPC插件需要自己编译，而且存在环境问题。推荐使用gradle或者maven的protobuf插件。实例项目使用了gradle，根目录build.gradle配置如下:
+由于protoc的gRPC插件需要自己编译，而且存在环境问题。推荐使用gradle或者maven的protobuf插件。入门示例项目使用了gradle，根目录build.gradle配置如下:
 
 ```
 plugins {
@@ -167,197 +168,191 @@ protobuf {
 ![gRPC生成的目录结构](grpc-in-depth/starter-genenate-grpc.png)
 ## 服务端
 
->无论客户端以异步非阻塞还是同步阻塞形式调用，gRPC服务端的返回都是以异步形式返回。对于异步的请求或者返回，都需要实现gRPC的`io.grpc.stub.StreamObserver`接口。接口有三个方法：
+无论客户端以异步非阻塞还是同步阻塞形式调用，gRPC服务端的Response都是异步形式。对于异步的Request或者Response，都需要实现gRPC的`io.grpc.stub.StreamObserver`接口。`io.grpc.stub.StreamObserver`接口有三个方法：
 + `onNext`:表示接收/发送一个对象
 + `onError`:处理异常
-+ `onCompleted`:表示请求或返回结束
++ `onCompleted`:表示Request或Response结束
 
->当请求来到服务端端时，会异步调用requestObserver的onNext方法，直到结束时调用requestObserver的onCompleted方法；服务端调用responseObserver的onNext把结果返回给客户端，直到调用responseObserver的onCompleted方法通知客户端返回结束。服务端代码如下：
+当Request发送到服务端端时，会异步调用requestObserver的onNext方法，直到结束时调用requestObserver的onCompleted方法；服务端调用responseObserver的onNext把Response返回给客户端，直到调用responseObserver的onCompleted方法通知客户端Response结束。服务端代码如下：
 ```
-import cn.lmh.examples.grpc.proto.*;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
-import io.grpc.stub.StreamObserver;
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-
 public class RouteGuideServer {
-    private final int port;
-    private final Server server;
+	private final int port;
+	private final Server server;
 
-    public RouteGuideServer(int port) throws IOException {
-        this.port = port;
-        server = ServerBuilder.forPort(port).addService(new RouteGuideService())
-                .build();
-    }
+	public RouteGuideServer(int port) throws IOException {
+		this.port = port;
+		server = ServerBuilder.forPort(port).addService(new RouteGuideService())
+				.build();
+	}
 
-    /** Start server. */
-    public void start() throws IOException {
-        server.start();
-        System.out.println("Server started, listening on " + port);
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                RouteGuideServer.this.stop();
-            }
-        });
-    }
+	/**
+	 * Start server.
+	 */
+	public void start() throws IOException {
+		server.start();
+		System.out.println("Server started, listening on " + port);
+		Runtime.getRuntime().addShutdownHook(new Thread() {
+			@Override
+			public void run() {
+				RouteGuideServer.this.stop();
+			}
+		});
+	}
 
-    /** Stop server */
-    public void stop() {
-        if (server != null) {
-            server.shutdown();
-        }
-    }
+	/**
+	 * Stop server
+	 */
+	public void stop() {
+		if (server != null) {
+			server.shutdown();
+		}
+	}
 
-    /**
-     * Await termination on the main thread since the grpc library uses daemon threads.
-     */
-    private void blockUntilShutdown() throws InterruptedException {
-        if (server != null) {
-            server.awaitTermination();
-        }
-    }
+	/**
+	 * Await termination on the main thread since the grpc library uses daemon threads.
+	 */
+	private void blockUntilShutdown() throws InterruptedException {
+		if (server != null) {
+			server.awaitTermination();
+		}
+	}
 
-    public static void main(String[] args) throws Exception {
-        RouteGuideServer server = new RouteGuideServer(8980);
-        server.start();
-        server.blockUntilShutdown();
-    }
+	public static void main(String[] args) throws Exception {
+		RouteGuideServer server = new RouteGuideServer(8980);
+		server.start();
+		server.blockUntilShutdown();
+	}
 
-    private static class RouteGuideService extends RouteGuideGrpc.RouteGuideImplBase {
-        @Override
-        public void getPoint(Point request, StreamObserver<LocationNote> responseObserver) {
-            LocationNote value = LocationNote.newBuilder().setLocation(request).setTimestamp(System.nanoTime()).build();
-            responseObserver.onNext(value);
-            responseObserver.onCompleted();
-        }
+	private static class RouteGuideService extends RouteGuideGrpc.RouteGuideImplBase {
+		@Override
+		public void getPoint(Point request, StreamObserver<LocationNote> responseObserver) {
+			LocationNote value = LocationNote
+				.newBuilder()
+				.setLocation(request)
+				.setTimestamp(System.nanoTime())
+				.build();
+			responseObserver.onNext(value);
+			responseObserver.onCompleted();
+		}
 
-        @Override
-        public void listPoints(Rectangle request, StreamObserver<Point> responseObserver) {
-            int left = Math.min(request.getLo().getLongitude(), request.getHi().getLongitude());
-            int right = Math.max(request.getLo().getLongitude(), request.getHi().getLongitude());
-            int top = Math.max(request.getLo().getLatitude(), request.getHi().getLatitude());
-            int bottom = Math.max(request.getLo().getLatitude(), request.getHi().getLatitude());
-            for(int x = left; x <= right; x++){
-                for(int y = top; y >= bottom; y--){
-                    Point point = Point.newBuilder().setLongitude(x).setLatitude(y).build();
-                    responseObserver.onNext(point);
-                }
-            }
-            responseObserver.onCompleted();
-        }
+		@Override
+		public void listPoints(Rectangle request, StreamObserver<Point> responseObserver) {
+			int left = Math.min(request.getLo().getLongitude(), request.getHi().getLongitude());
+			int right = Math.max(request.getLo().getLongitude(), request.getHi().getLongitude());
+			int top = Math.max(request.getLo().getLatitude(), request.getHi().getLatitude());
+			int bottom = Math.max(request.getLo().getLatitude(), request.getHi().getLatitude());
+			for (int x = left; x <= right; x++) {
+				for (int y = top; y >= bottom; y--) {
+					Point point = Point.newBuilder().setLongitude(x).setLatitude(y).build();
+					responseObserver.onNext(point);
+				}
+			}
+			responseObserver.onCompleted();
+		}
 
-        @Override
-        public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
-            return new StreamObserver<Point>(){ //返回的是requestObserver
-                AtomicInteger pointCount = new AtomicInteger(0);
-                final long startTime = System.nanoTime();
+		@Override
+		public StreamObserver<Point> recordRoute(StreamObserver<RouteSummary> responseObserver) {
+			return new StreamObserver<Point>() { //返回的是requestObserver
+				AtomicInteger pointCount = new AtomicInteger(0);
+				final long startTime = System.nanoTime();
 
-                @Override
-                public void onNext(Point value) {
-                    int count = pointCount.incrementAndGet();
-                }
+				@Override
+				public void onNext(Point value) {
+					int count = pointCount.incrementAndGet();
+				}
 
-                @Override
-                public void onError(Throwable t) {}
+				@Override
+				public void onError(Throwable t) {
+				}
 
-                @Override
-                public void onCompleted() {
-                    RouteSummary result = RouteSummary.newBuilder().setElapsedTime(System.nanoTime() - startTime).setPointCount(pointCount.get()).build();
-                    responseObserver.onNext(result);
-                    responseObserver.onCompleted();
-                }
-            };
-        }
+				@Override
+				public void onCompleted() {
+					RouteSummary result = RouteSummary.newBuilder().setElapsedTime(System.nanoTime() - startTime).setPointCount(pointCount.get()).build();
+					responseObserver.onNext(result);
+					responseObserver.onCompleted();
+				}
+			};
+		}
 
-        @Override
-        public StreamObserver<Point> getPointStream(StreamObserver<RouteSummary> responseObserver) {
-            return new StreamObserver<Point>(){ //返回的是requestObserver
-                AtomicInteger pointCount = new AtomicInteger(0);
-                final long startTime = System.nanoTime();
+		@Override
+		public StreamObserver<Point> getPointStream(StreamObserver<RouteSummary> responseObserver) {
+			return new StreamObserver<Point>() { //返回的是requestObserver
+				AtomicInteger pointCount = new AtomicInteger(0);
+				final long startTime = System.nanoTime();
 
-                @Override
-                public void onNext(Point value) {
-                    int count = pointCount.incrementAndGet();
-                    RouteSummary result = RouteSummary.newBuilder().setElapsedTime(System.nanoTime() - startTime).setPointCount(count).build();
-                    responseObserver.onNext(result);
-                }
+				@Override
+				public void onNext(Point value) {
+					int count = pointCount.incrementAndGet();
+					RouteSummary result = RouteSummary.newBuilder().setElapsedTime(System.nanoTime() - startTime).setPointCount(count).build();
+					responseObserver.onNext(result);
+				}
 
-                @Override
-                public void onError(Throwable t) {}
+				@Override
+				public void onError(Throwable t) {
+				}
 
-                @Override
-                public void onCompleted() {
-                    responseObserver.onCompleted();
-                }
-            };
-        }
-    }
+				@Override
+				public void onCompleted() {
+					responseObserver.onCompleted();
+				}
+			};
+		}
+	}
 }
 ```
 
 ## 客户端
 
-gRPC的客户端有同步阻塞客户端（blockingStub)和异步非阻塞客户端(Stub）两种。同步客户端使用比较方便，但是性能较低，而且不支持stream形式的request;异步客户端性能较高，支持stream形式的request，但是如果想要以同步方式调用需要额外封装。本文将主要以异步为例。
+gRPC的客户端有同步阻塞客户端（blockingStub)和异步非阻塞客户端(Stub）两种。同步客户端使用比较方便，但是性能较低，而且不支持stream形式的Request;异步客户端性能较高，支持stream形式的Request，但是如果想要以同步方式调用需要额外封装。本文将主要以异步为例。
 
 ### 异步转同步
 
-由于gRPC的异步客户端性能较高且功能更完整，所以一般都会采用异步客户端。异步客户端接收到的服务端返回也是以`io.grpc.stub.StreamObserver`形式。由于客户端的调用可能是在异步进程中但更可能是在同步进程中，所以就存在一个如何把gRPC异步返回转为同步返回的过程。
+由于gRPC的异步客户端性能较高且功能更完整，所以一般都会采用异步客户端。异步客户端接收到的Response也是以`io.grpc.stub.StreamObserver`形式。由于客户端的调用可能是在异步进程中但更可能是在同步进程中，所以就存在一个如何把gRPC异步Response转为同步Response的问题。
 
-一个比较常见的思路是写一个`io.grpc.stub.StreamObserver`实现，里面有一个内置变量保存异步返回的结果，再添加一个阻塞式的`get()`方法，直到返回完成才把所有结果返回。要知道返回是否完成，需要添加一个`Boolean`或者`AtomicBoolean`变量，初始化为`false`，调用`responseObserver.onCompleted()`方法时设置为`true`，这样就可以通过这个变量判断返回是否完成。阻塞`get()`方法最常见的思路是`get()`写一个`while`循环，直到变量值改为`true`才退出循环并返回结果。这种方式的优点是简单直接，任何语言都可以简单实现，缺点是由于使用循环可能CPU占用较高。另一个思路是在仅限于java之类多线程比较完善的语言，如在发现返回没有结束时，将线程挂起，`调用responseObserver.onCompleted()`方法在修改变量的同时唤醒线程。代码如下
+一个比较常见的思路是写一个`io.grpc.stub.StreamObserver`实现，里面有一个内置变量保存异步Response的结果，再添加一个阻塞式的`get()`方法，直到Response结束才把所有结果返回。要知道Response是否结束，需要添加一个`Boolean`或者`AtomicBoolean`变量，初始化为`false`，调用`responseObserver.onCompleted()`方法时设置为`true`，这样就可以通过这个变量判断Response是否结束。
+
+阻塞`get()`方法最常见的思路是`get()`写一个`while`循环，直到变量值改为`true`才退出循环并返回结果。这种方式的优点是简单直接，任何语言都可以简单实现，缺点是由于使用循环可能CPU占用较高。而对于java这种多线程比较完善的语言，另一个比较好思路是Response结束前将线程挂起，当调用`responseObserver.onCompleted()`方法再唤醒线程。代码如下：
 
 ```
-import io.grpc.stub.StreamObserver;
-import java.util.ArrayList;
-import java.util.List;
 public class CallableStreamObserver<T> implements StreamObserver<T> {
-    List<T> values = new ArrayList<T>();
-    boolean isCompleted = false;
-    Throwable t = null;
-    @Override
-    public void onNext(T value) {
-        this.values.add(value);
-    }
-    @Override
-    public void onError(Throwable t) {
-        this.isCompleted = true;
-        this.t=t;
-        notifyAll();
-    }
-    @Override
-    public synchronized void onCompleted() {
-        this.isCompleted = true;
-        notifyAll();
-    }
-    public List<T> get() throws Throwable{
-        while(!this.isCompleted){
-            synchronized (this) {
-                this.wait(60 * 1000);
-            }
-        }
-        if(null != t){
-            throw this.t;
-        }else{
-            return this.values;
-        }
-    }
+	List<T> values = new ArrayList<T>();
+	boolean isCompleted = false;
+	Throwable t = null;
+
+	@Override
+	public void onNext(T value) {
+		this.values.add(value);
+	}
+
+	@Override
+	public void onError(Throwable t) {
+		this.isCompleted = true;
+		notifyAll();
+	}
+
+	@Override
+	public synchronized void onCompleted() {
+		this.isCompleted = true;
+		notifyAll();
+	}
+
+	public List<T> get() throws Throwable {
+		if (!this.isCompleted) {
+			synchronized (this) {
+				this.wait(60 * 1000);
+			}
+		}
+		if (null != t) {
+			throw this.t;
+		} else {
+			return this.values;
+		}
+	}
 }
 ```
 
 ### 客户端代码
 ```
-import cn.lmh.examples.grpc.CallableStreamObserver;
-import cn.lmh.examples.grpc.proto.*;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.stub.StreamObserver;
-
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 public class RouteGuideClient {
 
     private final ManagedChannel channel;
@@ -365,11 +360,10 @@ public class RouteGuideClient {
     private final RouteGuideGrpc.RouteGuideStub asyncStub;
 
     public RouteGuideClient(String host, int port) {
-        this(ManagedChannelBuilder.forAddress(host, port).usePlaintext());
-    }
-
-    /** Construct client for accessing RouteGuide server using the existing channel. */
-    public RouteGuideClient(ManagedChannelBuilder<?> channelBuilder) {
+        String target = "dns://" + host + ":" + port;
+        ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder
+                .forTarget(target)
+                .usePlaintext();
         channel = channelBuilder.build();
         blockingStub = RouteGuideGrpc.newBlockingStub(channel);
         asyncStub = RouteGuideGrpc.newStub(channel);
