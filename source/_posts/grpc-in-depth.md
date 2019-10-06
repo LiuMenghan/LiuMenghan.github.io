@@ -786,212 +786,203 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
   }
 }
 ```
+
 可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是使用执行了一个继承自`Runnable`的`Resolve`接口。
+
 ```
 @Override
 public void start(Listener2 listener) {
-Preconditions.checkState(this.listener == null, "already started");
-executor = SharedResourceHolder.get(executorResource);
-this.listener = Preconditions.checkNotNull(listener, "listener");
-resolve();
+	Preconditions.checkState(this.listener == null, "already started");
+	executor = SharedResourceHolder.get(executorResource);
+	this.listener = Preconditions.checkNotNull(listener, "listener");
+	resolve();
 }
 
-@Override
-public void refresh() {
-Preconditions.checkState(listener != null, "not started");
-resolve();
-}
 private void resolve() {
-if (resolving || shutdown || !cacheRefreshRequired()) {
-  return;
+	if (resolving || shutdown || !cacheRefreshRequired()) {
+		return;
+	}
+	resolving = true;
+	executor.execute(new Resolve(listener));
 }
-resolving = true;
-executor.execute(new Resolve(listener));
-}
+
 private final class Resolve implements Runnable {
-    private final Listener2 savedListener;
+	private final Listener2 savedListener;
 
-    Resolve(Listener2 savedListener) {
-      this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
-    }
+	Resolve(Listener2 savedListener) {
+	  this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
+	}
 
-    @Override
-    public void run() {
-      if (logger.isLoggable(Level.FINER)) {
-        logger.finer("Attempting DNS resolution of " + host);
-      }
-      try {
-        resolveInternal();
-      } finally {
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              resolving = false;
-            }
-          });
-      }
-    }
+	@Override
+	public void run() {
+		if (logger.isLoggable(Level.FINER)) {
+			logger.finer("Attempting DNS resolution of " + host);
+		}
+		try {
+			resolveInternal();
+		} finally {
+			syncContext.execute(new Runnable() {
+				@Override
+				public void run() {
+					resolving = false;
+				}
+			});
+		}
+	}
 
-    @VisibleForTesting
-    void resolveInternal() {
-      InetSocketAddress destination =
-          InetSocketAddress.createUnresolved(host, port);
-      ProxiedSocketAddress proxiedAddr;
-      try {
-        proxiedAddr = proxyDetector.proxyFor(destination);
-      } catch (IOException e) {
-        savedListener.onError(
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-        return;
-      }
-      if (proxiedAddr != null) {
-        if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Using proxy address " + proxiedAddr);
-        }
-        EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
-        ResolutionResult resolutionResult =
-            ResolutionResult.newBuilder()
-                .setAddresses(Collections.singletonList(server))
-                .setAttributes(Attributes.EMPTY)
-                .build();
-        savedListener.onResult(resolutionResult);
-        return;
-      }
+	@VisibleForTesting
+	void resolveInternal() {
+		InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
+		ProxiedSocketAddress proxiedAddr;
+		try {
+			proxiedAddr = proxyDetector.proxyFor(destination);
+		} catch (IOException e) {
+			savedListener.onError(
+			Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+			return;
+		}
+		if (proxiedAddr != null) {
+			if (logger.isLoggable(Level.FINER)) {
+				logger.finer("Using proxy address " + proxiedAddr);
+			}
+			EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
+			ResolutionResult resolutionResult =
+			ResolutionResult.newBuilder()
+				.setAddresses(Collections.singletonList(server))
+				.setAttributes(Attributes.EMPTY)
+				.build();
+			savedListener.onResult(resolutionResult);
+			return;
+		}
 
-      ResolutionResults resolutionResults;
-      try {
-        ResourceResolver resourceResolver = null;
-        if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-          resourceResolver = getResourceResolver();
-        }
-        final ResolutionResults results = resolveAll(
-            addressResolver,
-            resourceResolver,
-            enableSrv,
-            enableTxt,
-            host);
-        resolutionResults = results;
-        syncContext.execute(new Runnable() {
-            @Override
-            public void run() {
-              cachedResolutionResults = results;
-              if (cacheTtlNanos > 0) {
-                stopwatch.reset().start();
-              }
-            }
-          });
-        if (logger.isLoggable(Level.FINER)) {
-          logger.finer("Found DNS results " + resolutionResults + " for " + host);
-        }
-      } catch (Exception e) {
-        savedListener.onError(
-            Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-        return;
-      }
-      // Each address forms an EAG
-      List<EquivalentAddressGroup> servers = new ArrayList<>();
-      for (InetAddress inetAddr : resolutionResults.addresses) {
-        servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
-      }
-      servers.addAll(resolutionResults.balancerAddresses);
-      if (servers.isEmpty()) {
-        savedListener.onError(Status.UNAVAILABLE.withDescription(
-            "No DNS backend or balancer addresses found for " + host));
-        return;
-      }
+		ResolutionResults resolutionResults;
+		try {
+			ResourceResolver resourceResolver = null;
+			if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
+				resourceResolver = getResourceResolver();
+			}
+			final ResolutionResults results = resolveAll(
+				addressResolver,
+				resourceResolver,
+				enableSrv,
+				enableTxt,
+				host);
+			resolutionResults = results;
+			syncContext.execute(new Runnable() {
+				@Override
+				public void run() {
+					cachedResolutionResults = results;
+					if (cacheTtlNanos > 0) {
+						stopwatch.reset().start();
+					}
+				}
+			});
+		} catch (Exception e) {
+			savedListener.onError(
+				Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
+			return;
+		}
+		List<EquivalentAddressGroup> servers = new ArrayList<>();
+		for (InetAddress inetAddr : resolutionResults.addresses) {
+			servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
+		}
+		servers.addAll(resolutionResults.balancerAddresses);
+		if (servers.isEmpty()) {
+			savedListener.onError(Status.UNAVAILABLE.withDescription(
+				"No DNS backend or balancer addresses found for " + host));
+			return;
+		}
 
-      Attributes.Builder attrs = Attributes.newBuilder();
-      if (!resolutionResults.txtRecords.isEmpty()) {
-        ConfigOrError serviceConfig =
-            parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
-        if (serviceConfig != null) {
-          if (serviceConfig.getError() != null) {
-            savedListener.onError(serviceConfig.getError());
-            return;
-          } else {
-            @SuppressWarnings("unchecked")
-            Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
-            attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
-          }
-        }
-      } else {
-        logger.log(Level.FINE, "No TXT records found for {0}", new Object[]{host});
-      }
-      ResolutionResult resolutionResult =
-          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
-      savedListener.onResult(resolutionResult);
-    }
-  }
-```  
+		Attributes.Builder attrs = Attributes.newBuilder();
+		if (!resolutionResults.txtRecords.isEmpty()) {
+			ConfigOrError serviceConfig =
+			parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
+			if (serviceConfig != null) {
+				if (serviceConfig.getError() != null) {
+					savedListener.onError(serviceConfig.getError());
+					return;
+				} else {
+					@SuppressWarnings("unchecked")
+					Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
+					attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
+				}
+			}
+		}
+
+		ResolutionResult resolutionResult =
+		ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
+		savedListener.onResult(resolutionResult);
+	}
+}
+```
+
 在有代理的情况下，`Resolve`的`resolveInternal`会根据代理返回的`ProxiedSocketAddress`创建`EquivalentAddressGroup`作为服务端列表返回，并设置空config；否则会调用`resolveAll`方法获取服务端列表，并调用`parseServiceConfig`方法设置config。`resolveAll`方法返回的`ResolutionResults`有三个变量`addresses`、`txtRecords`和`balancerAddresses`。
+
 ```
 @VisibleForTesting
-  static ResolutionResults resolveAll(
-      AddressResolver addressResolver,
-      @Nullable ResourceResolver resourceResolver,
-      boolean requestSrvRecords,
-      boolean requestTxtRecords,
-      String name) {
-    List<? extends InetAddress> addresses = Collections.emptyList();
-    Exception addressesException = null;
-    List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
-    Exception balancerAddressesException = null;
-    List<String> txtRecords = Collections.emptyList();
-    Exception txtRecordsException = null;
+static ResolutionResults resolveAll(
+	AddressResolver addressResolver,
+	@Nullable ResourceResolver resourceResolver,
+	boolean requestSrvRecords,
+	boolean requestTxtRecords,
+	String name) {
+	List<? extends InetAddress> addresses = Collections.emptyList();
+	Exception addressesException = null;
+	List<EquivalentAddressGroup> balancerAddresses = Collections.emptyList();
+	Exception balancerAddressesException = null;
+	List<String> txtRecords = Collections.emptyList();
+	Exception txtRecordsException = null;
 
-    try {
-      addresses = addressResolver.resolveAddress(name);
-    } catch (Exception e) {
-      addressesException = e;
-    }
-    if (resourceResolver != null) {
-      if (requestSrvRecords) {
-        try {
-          balancerAddresses =
-              resourceResolver.resolveSrv(addressResolver, GRPCLB_NAME_PREFIX + name);
-        } catch (Exception e) {
-          balancerAddressesException = e;
-        }
-      }
-      if (requestTxtRecords) {
-        boolean balancerLookupFailedOrNotAttempted =
-            !requestSrvRecords || balancerAddressesException != null;
-        boolean dontResolveTxt =
-            (addressesException != null) && balancerLookupFailedOrNotAttempted;
-        // Only do the TXT record lookup if one of the above address resolutions succeeded.
-        if (!dontResolveTxt) {
-          try {
-            txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + name);
-          } catch (Exception e) {
-            txtRecordsException = e;
-          }
-        }
-      }
-    }
-    try {
-      if (addressesException != null
-          && (balancerAddressesException != null || balancerAddresses.isEmpty())) {
-        Throwables.throwIfUnchecked(addressesException);
-        throw new RuntimeException(addressesException);
-      }
-    } finally {
-      if (addressesException != null) {
-        logger.log(Level.FINE, "Address resolution failure", addressesException);
-      }
-      if (balancerAddressesException != null) {
-        logger.log(Level.FINE, "Balancer resolution failure", balancerAddressesException);
-      }
-      if (txtRecordsException != null) {
-        logger.log(Level.FINE, "ServiceConfig resolution failure", txtRecordsException);
-      }
-    }
-    return new ResolutionResults(addresses, txtRecords, balancerAddresses);
-  }
+	try {
+		addresses = addressResolver.resolveAddress(name);
+	} catch (Exception e) {
+	addressesException = e;
+	}
+	if (resourceResolver != null) {
+		if (requestSrvRecords) {
+			try {
+				balancerAddresses =
+					resourceResolver.resolveSrv(addressResolver, GRPCLB_NAME_PREFIX + name);
+			} catch (Exception e) {
+				balancerAddressesException = e;
+			}
+		}
+		if (requestTxtRecords) {
+			boolean balancerLookupFailedOrNotAttempted =
+				!requestSrvRecords || balancerAddressesException != null;
+			boolean dontResolveTxt =
+				(addressesException != null) && balancerLookupFailedOrNotAttempted;
+			if (!dontResolveTxt) {
+				try {
+					txtRecords = resourceResolver.resolveTxt(SERVICE_CONFIG_NAME_PREFIX + name);
+				} catch (Exception e) {
+				txtRecordsException = e;
+				}
+			}	
+		}
+	}
+	try {
+		if (addressesException != null
+			&& (balancerAddressesException != null || balancerAddresses.isEmpty())) {
+			Throwables.throwIfUnchecked(addressesException);
+			throw new RuntimeException(addressesException);
+		}
+	} finally {
+		if (addressesException != null) {
+			logger.log(Level.FINE, "Address resolution failure", addressesException);
+		}
+		if (balancerAddressesException != null) {
+			logger.log(Level.FINE, "Balancer resolution failure", balancerAddressesException);
+		}
+		if (txtRecordsException != null) {
+			logger.log(Level.FINE, "ServiceConfig resolution failure", txtRecordsException);
+		}
+	}
+	return new ResolutionResults(addresses, txtRecords, balancerAddresses);
+}
 ```
+
 `addressResolver`的`resolveAddress`方法实际是调用JDK的`java.net.InetAddress`的`getAllByName`方法，即根据host通过DNS返回一系列服务端列表。`resourceResolver`根据LDAP协议获取指定命名空间下的服务端列表地址。`txtRecords`和`balancerAddresses`是和LDAP相关的参数，方法入参`requestSrvRecords`和`requestTxtRecords`的默认值都是false。由于LDAP不是特别常用，这里就不深入展开了。
-
-
-
 
 ## 负载均衡
 
@@ -1029,8 +1020,6 @@ gRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin
   }
 ```
 如果是首次调用(subchannel == null) 会创建subchannel，其实现是`io.grpc.internal.ManagedChannelImpl.SubchannelImpl`，创建的过程中会创建`io.grpc.internal.InternalSubchannel`。然后调用`io.grpc.internal.ManagedChannelImpl`的`updateBalancingState`方法，把`subchannelPicker`更新为实现`Picker`，然后开启subchannel的连接。
-
-
 
 ## 传输
 
