@@ -1,5 +1,5 @@
 ---
-title: Grpc详解
+title: gRPC客户端详解
 ---
 
 # RPC框架的选择
@@ -425,14 +425,24 @@ public class RouteGuideClient {
 
 # GRPC代码详解
 
-鉴于整个Grpc的代码还是比较多的，本文将专注于以下问题：
-1.究竟有哪些可用的Server可以提供服务？
-2.究竟应该在这些可用的服务端中选择哪个Server？
-3.Client与Server之间是如何通信的？
+Grpc将整个组件分为分为三层：Stub、Channel和Transport。
+Transport层承担了将字节从网络中取出和放入数据的工作，有三种实现Netty、okHttp、inProgress。gRPC认为Transport层属于内部代码，不保证其API的稳定性。
+Channel层是对Transport层功能的抽象，相比Stub层提供更多的功能，比如服务发现和负载均衡都是在这层实现的。
+gRPC附带的插件可以从.proto文件直接生成Stub层代码，开发人员通过直接调用Stub层的代码调用RPC服务。
 
-## 发现服务端
+整个Grpc的代码比较多的，封装比较多，相对于interface更喜欢使用abstract class，相对于使用反射更喜欢使用硬编码，与大多数java项目的编码风格有很大差别，阅读起来很不习惯。在源码层面本文将关注下面这些方面：
+1.Channel的初始化过程;
+2.gRPC中的服务发现;
+3.gRPC中的负载均衡
+4.Client与Server之间的数据传输
 
-前文的入门示例客户端中直接写了host和port，那么不免让人产生疑问，如果有多个可以提供服务的Server如何处理。如前文的客户端示例所示，客户端的创建依赖于`io.grpc.ManagedChannel`，而`io.grpc.ManagedChannel`依赖于`io.grpc.ManagedChannelBuilder`。在`io.grpc.ManagedChannelBuilder`中有两个方法,`forTarget`和`nameResolverFactory`，二者配合使用可以发现服务端。
+## Channel的初始化过程
+
+通过入门示例可以看到，Channel的初始化过程分三步：
+1.调用forTarget方法创建`io.grpc.ManagedChannelBuilder`;
+2.配置各种选项，不论如何配置，返回的总是`io.grpc.ManagedChannelBuilder`对象;
+3.调用build方法创建`io.grpc.ManagedChannel`。
+
 
 ### `forTarget`方法
 感觉Grpc这里设计比较繁琐。`forTarget`方法的实际功能**是把一个url赋值给`io.grpc.ManagedChannelBuilder`内部的`target`变量**，但是过程比较绕。
@@ -491,6 +501,32 @@ protected AbstractManagedChannelImplBuilder(String target) {
     this.directServerAddress = null;
   }
 ```
+### `build`方法
+从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，他的`build`方法在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
+```
+@Override
+  public ManagedChannel build() {
+    return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
+        this,
+        buildTransportFactory(),
+        // TODO(carl-mastrangelo): Allow clients to pass this in
+        new ExponentialBackoffPolicy.Provider(),
+        SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
+        GrpcUtil.STOPWATCH_SUPPLIER,
+        getEffectiveInterceptors(),
+        TimeProvider.SYSTEM_TIME_PROVIDER));
+  }
+```  
+从功能上看`io.grpc.internal.ManagedChannelOrphanWrapper`没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
+
+`io.grpc.internal.ManagedChannelImpl`构造方法的几个参数中，除了第一个参数是builder本身，第二个参数是用来创建Tranport的Factory，第三个参数是后台连接重试策略，第四个参数是gRPC的全局线程池，第五个和第七个都是和时间相关的对象，主要用于日志中，第六个是客户端调用时的interceptor。`buildTransportFactory`的实现方法会`io.grpc.netty.NettyChannelBuilder`，会创建一个`io.grpc.netty.NettyChannelBuilder.NettyTransportFactory`。
+
+
+
+## 发现服务端
+
+前文的入门示例客户端中直接写了host和port，那么不免让人产生疑问，如果有多个可以提供服务的Server如何处理。。在`io.grpc.ManagedChannelBuilder`中有一个`nameResolverFactory`方法，可以指定如何解析`target`地址，用来发现服务端。
+
 ### `nameResolverFactory`方法
 这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolve.Factory`实现的话会使用用户的`io.grpc.NameResolve.Factroy`实现，否则会使用`io.grpc.NameResolverRegistry`的默认实现。
 ```
@@ -970,7 +1006,8 @@ public abstract class NameResolver {
   }
 }
 ```
-在客户端启动的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。`Listener`可以接收服务端地址，用来返回真实的服务地址。
+在客户端首次连接服务端的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。`Listener2`可以接收服务端地址，用来返回真实的服务地址。
+
 ###`io.grpc.internal.DnsNameResolver`
 由于Grpc支持长连接，所以如果直连的话只会访问一个域名下的一台服务器，即首次连接时通过DNS返回IP地址。`io.grpc.internal.DnsNameResolverProvider`是对`io.grpc.internal.DnsNameResolver`的简单封装，只支持以`dns://`开头的地址。`io.grpc.internal.DnsNameResolver`会根据`target`获取该host下所有关联的IP，即通过DNS解析出所有的服务端IP地址。
 ```
@@ -1218,31 +1255,211 @@ private final class Resolve implements Runnable {
 `addressResolver`的`resolveAddress`方法实际是调用JDK的`java.net.InetAddress`的`getAllByName`方法，即根据host通过DNS返回一系列服务端列表。`resourceResolver`根据LDAP协议获取指定命名空间下的服务端列表地址。`txtRecords`和`balancerAddresses`是和LDAP相关的参数，方法入参`requestSrvRecords`和`requestTxtRecords`的默认值都是false。由于LDAP不是特别常用，这里就不深入展开了。
 
 
-### 自定义基于Euraka的`NameResolver.Factory`实现
+
 
 ## 负载均衡
 
-`io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡的具体实现`io.grpc.LoadBalancer`。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
+`io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡`io.grpc.LoadBalancer`的具体实现。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
 `io.grpc.LoadBalancer`的核心逻辑实际在`SubchannelPicker`中，`SubchannelPicker`中的`pickSubchannel`方法会返回选择的结果。
 GRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin`。前者总会使用第一个可用的服务端，后者则是简单轮询。
 
-### GRPC的简单轮询负载均衡实现
+### `io.grpc.internal.PickFirstLoadBalancer`
 
-当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。在简单轮询`io.grpc.util.RoundRobinLoadBalancer`中，更新完服务端列表后，会调用`updateBalancingState`方法更新`SubchannelPicker`的实现`ReadyPicker`。`ReadyPicker`的`pickSubchannel`实际上是调用其私有方法`nextSubchannel`决定subchannel。可以看到定义了一个`AtomicInteger`类型的变量`indexUpdater`，每次进行选择自增一次，直到超出最大长度取余并复位。
+当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。
 ```
-private Subchannel nextSubchannel() {
-      int size = list.size();
-      int i = indexUpdater.incrementAndGet(this);
-      if (i >= size) {
-        int oldi = i;
-        i %= size;
-        indexUpdater.compareAndSet(this, oldi, i);
+@Override
+  public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+    List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
+    if (subchannel == null) {
+      final Subchannel subchannel = helper.createSubchannel(
+          CreateSubchannelArgs.newBuilder()
+              .setAddresses(servers)
+              .build());
+      subchannel.start(new SubchannelStateListener() {
+          @Override
+          public void onSubchannelState(ConnectivityStateInfo stateInfo) {
+            processSubchannelState(subchannel, stateInfo);
+          }
+        });
+      this.subchannel = subchannel;
+
+      // The channel state does not get updated when doing name resolving today, so for the moment
+      // let LB report CONNECTION and call subchannel.requestConnection() immediately.
+      helper.updateBalancingState(CONNECTING, new Picker(PickResult.withSubchannel(subchannel)));
+      subchannel.requestConnection();
+    } else {
+      subchannel.updateAddresses(servers);
+    }
+  }
+```
+如果是首次调用(subchannel == null) 会创建subchannel，其实现是`io.grpc.internal.ManagedChannelImpl.SubchannelImpl`，创建的过程中会创建`io.grpc.internal.InternalSubchannel`。然后调用`io.grpc.internal.ManagedChannelImpl`的`updateBalancingState`方法，把`subchannelPicker`更新为实现`Picker`，然后开启subchannel的连接。
+
+
+
+## 传输
+
+gRPC客户端端会调用`io.grpc.internal.ManagedChannelImpl.ChannelTransportProvider`的`get`方法获取`io.grc.internal.ClientTransport`。调用栈如下：
+![ClientTransport获取ClientTransport的调用栈](grpc-in-depth/get-client-transport-stack.png)
+
+```
+public ClientTransport get(PickSubchannelArgs args) {
+      SubchannelPicker pickerCopy = subchannelPicker;
+      if (shutdown.get()) {
+        // If channel is shut down, delayedTransport is also shut down which will fail the stream
+        // properly.
+        return delayedTransport;
       }
-      return list.get(i);
+      if (pickerCopy == null) {
+        final class ExitIdleModeForTransport implements Runnable {
+          @Override
+          public void run() {
+            exitIdleMode();
+          }
+        }
+
+        syncContext.execute(new ExitIdleModeForTransport());
+        return delayedTransport;
+      }
+      PickResult pickResult = pickerCopy.pickSubchannel(args);
+      ClientTransport transport = GrpcUtil.getTransportFromPickResult(
+          pickResult, args.getCallOptions().isWaitForReady());
+      if (transport != null) {
+        return transport;
+      }
+      return delayedTransport;
     }
 ```
+### 首次调用
 
-### 自定义加权随机负载均衡实现
+如果subchannelPicker存在，会使用subchannelPicker进行选择，否则会初始化NameResolver和LoadBalancer。ExitIdleModeForTransport、delayedTransport会被依次放到同步队列中，保证delayedTransport的传输一定会发生在subchannelPicker初始化完成后。
+
+`exitIdleMode`方法会初始化NameResolver和LoadBalancer，并会启动NameResolverListener。
+
+```
+@VisibleForTesting
+  void exitIdleMode() {
+    syncContext.throwIfNotInThisSynchronizationContext();
+    if (shutdown.get() || panicMode) {
+      return;
+    }
+    if (inUseStateAggregator.isInUse()) {
+      // Cancel the timer now, so that a racing due timer will not put Channel on idleness
+      // when the caller of exitIdleMode() is about to use the returned loadBalancer.
+      cancelIdleTimer(false);
+    } else {
+      // exitIdleMode() may be called outside of inUseStateAggregator.handleNotInUse() while
+      // isInUse() == false, in which case we still need to schedule the timer.
+      rescheduleIdleTimer();
+    }
+    if (lbHelper != null) {
+      return;
+    }
+    channelLogger.log(ChannelLogLevel.INFO, "Exiting idle mode");
+    LbHelperImpl lbHelper = new LbHelperImpl();
+    lbHelper.lb = loadBalancerFactory.newLoadBalancer(lbHelper);
+    // Delay setting lbHelper until fully initialized, since loadBalancerFactory is user code and
+    // may throw. We don't want to confuse our state, even if we will enter panic mode.
+    this.lbHelper = lbHelper;
+
+    NameResolverListener listener = new NameResolverListener(lbHelper, nameResolver);
+    nameResolver.start(listener);
+    nameResolverStarted = true;
+  }
+```
+在NameResolverListener的onResult方法中，调用`io.grpc.internal.AutoConfiguredLoadBalancerFactory`的`tryHandleResolvedAddresses`方法。进而会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法，从而更新subchannelPicker。
+![调用handleResolvedAddresses的调用栈](grpc-in-depth/calling-handle-resolved-address.png)
+
+在开启subchannel的连接过程中，会调用`io.grpc.internal.InternalSubchannel`的`obtainActiveTransport`方法。
+```
+@Override
+  public ClientTransport obtainActiveTransport() {
+    ClientTransport savedTransport = activeTransport;
+    if (savedTransport != null) {
+      return savedTransport;
+    }
+    syncContext.execute(new Runnable() {
+      @Override
+      public void run() {
+        if (state.getState() == IDLE) {
+          channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
+          gotoNonErrorState(CONNECTING);
+          startNewTransport();
+        }
+      }
+    });
+    return null;
+  }
+```
+在`startNewTransport`中，会获取真正的`io.grpc.internal.ConnectionClientTransport`实现。
+```
+ConnectionClientTransport transport =
+        new CallTracingTransport(
+            transportFactory
+                .newClientTransport(address, options, transportLogger), callsTracer);
+```
+这里的transportFactory就是上面提到`io.grpc.ManagedChannelBuilder`调用`build`初始化时调用`buildTransportFactory`方法返回的，依赖于Transport层的具体实现。在netty实现中，返回的是`io.grpc.netty.NettyClientTransport`。
 
 
-## 通信
+### Http2简介
+
+### 发送数据
+在首次调用时，因为subchannel还未开启，非首次调用会直接调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
+![调用newStream的调用栈](grpc-in-depth/calling-new-stream.png)
+在进行一系列http2设置后，会调用`io.grpc.internal.ClientStream`的`start`方法，为TransportState设置监听并通过Sink写入Header。
+```
+@Override
+  public final void start(ClientStreamListener listener) {
+    transportState().setListener(listener);
+    if (!useGet) {
+      abstractClientStreamSink().writeHeaders(headers, null);
+      headers = null;
+    }
+  }
+```
+初始化结束后，调用requestObserver的`onNext`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法，将protobuf对象转换成`InputStream`，并作为参数调用`io.grpc.internal.ClientStream`的writeMessage方法，进而调用`io.grpc.internal.MessageFramer`的`writePayload`方法，最终调用`writeToOutputStream`方法将内容写入Http的OutputStream。如果是参数是stream形式会继续调用flush。
+
+调用requestObserver的`onCompleted`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法`halfClose`方法，进而会调用`io.grpc.internal.MessageFramer`的`endOfMessages`，flush并结束发送消息。
+### 接受数据
+客户端接受到服务端返回的数据会调用ClientStreamListener的`messagesAvailable`方法，并通过同步线程池最终调用StreamObserver的`onNext`方法接收数据。
+当返回结束时会调用TransportState的`transportReportStatus`方法关闭连接，进而调用ClientStreamListener的`closed`方法关闭监听，进而调用StreamObserver的`onClose`方法。
+
+### gRPC通信格式
+gRPC发送的请求发送方法是POST，路径是/${serviceName}/${methodName},content-type为content-type = application/grpc+proto。
+
+#### Request
+```
+HEADERS (flags = END_HEADERS)
+:method = POST
+:scheme = http
+:path = /RouteGuide/getPoint
+grpc-timeout = 1S
+content-type = application/grpc+proto
+grpc-encoding = gzip
+
+DATA (flags = END_STREAM)
+<Length-Prefixed Message>
+```
+#### Response
+```
+HEADERS (flags = END_HEADERS)
+:status = 200
+grpc-encoding = gzip
+content-type = application/grpc+proto
+
+DATA
+<Length-Prefixed Message>
+
+HEADERS (flags = END_STREAM, END_HEADERS)
+grpc-status = 0 # OK
+trace-proto-bin = jher831yy13JHy3hc
+```
+# 扩展gRPC
+
+### 自定义基于Euraka的`NameResolver.Factory`实现
+
+### 自定义随机负载均衡实现
+
+
+
+
+
