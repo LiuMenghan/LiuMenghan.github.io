@@ -166,6 +166,7 @@ protobuf {
 我们的入门子项目名称叫做starter，配置好build.gradle之后，执行gradlew :starter:generateProto就可以在src/main/java下生成对应的文件：
 
 ![gRPC生成的目录结构](grpc-in-depth/starter-genenate-grpc.png)
+
 ## 服务端
 
 无论客户端以异步非阻塞还是同步阻塞形式调用，gRPC服务端的Response都是异步形式。对于异步的Request或者Response，都需要实现gRPC的`io.grpc.stub.StreamObserver`接口。`io.grpc.stub.StreamObserver`接口有三个方法：
@@ -174,6 +175,7 @@ protobuf {
 + `onCompleted`:表示Request或Response结束
 
 当Request发送到服务端端时，会异步调用requestObserver的onNext方法，直到结束时调用requestObserver的onCompleted方法；服务端调用responseObserver的onNext把Response返回给客户端，直到调用responseObserver的onCompleted方法通知客户端Response结束。服务端代码如下：
+
 ```
 public class RouteGuideServer {
 	private final int port;
@@ -352,6 +354,7 @@ public class CallableStreamObserver<T> implements StreamObserver<T> {
 ```
 
 ### 客户端代码
+
 ```
 public class RouteGuideClient {
 
@@ -435,18 +438,22 @@ gRPC官方将自己分为三层组件：Stub、Channel和Transport。
 ## Channel的初始化过程
 
 通过入门示例可以看到，Channel的初始化过程分三步：
-1.调用forTarget方法创建`io.grpc.ManagedChannelBuilder`;
-2.配置各种选项，不论如何配置，返回的总是`io.grpc.ManagedChannelBuilder`对象;
-3.调用build方法创建`io.grpc.ManagedChannel`。
+1. 调用forTarget方法创建`io.grpc.ManagedChannelBuilder`;
+2. 配置各种选项，不论如何配置，返回的总是`io.grpc.ManagedChannelBuilder`对象;
+3. 调用build方法创建`io.grpc.ManagedChannel`。
 
 ### `forTarget`方法
+
 gRPC这里设计比较繁琐，过程比较绕。`forTarget`方法的实际功能就是**把参数target赋值给`io.grpc.ManagedChannelBuilder`的内部变量`target`**，
+
 ```
 public static ManagedChannelBuilder<?> forTarget(String target) {
 	return ManagedChannelProvider.provider().builderForTarget(target);
 }
 ```
+
 `io.grpc.ManagedChannelProvider.provider()`会返回一个`io.grpc.ManagedChannelProvider`实现。有哪些`io.grpc.ManagedChannelProvider`实现是在`io.grpc.ManagedChannelProvider`中以硬编码形式确定的，这里其实存在利用反射改进的空间。
+
 ```
 private static final class HardcodedClasses implements Iterable<Class<?>> {
 	@Override
@@ -466,13 +473,17 @@ private static final class HardcodedClasses implements Iterable<Class<?>> {
 	}
 }
 ```
+
 实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。如果像前面示例项目一样只配置了netty实现,那就只有netty的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
+
 ```
 public NettyChannelBuilder builderForTarget(String target) {
 	return NettyChannelBuilder.forTarget(target);
 }
 ```
+
 而`io.grpc.netty.NettyChannelBuilder`继承自`io.grpc.internal.AbstractManagedChannelImplBuilder`，`forTarget`方法实际上调用了父类的构造函数。
+
 ```
 NettyChannelBuilder(String target) {
 	super(target);
@@ -482,522 +493,259 @@ public static NettyChannelBuilder forTarget(String target) {
 	return new NettyChannelBuilder(target);
 }
 ```
+
 `io.grpc.internal.AbstractManagedChannelImplBuilder`的构造函数主要作用是把参数赋值给`target`变量。
+
 ```
 protected AbstractManagedChannelImplBuilder(String target) {
 	this.target = Preconditions.checkNotNull(target, "target");
 	this.directServerAddress = null;
 }
 ```
+
 ### `build`方法
-从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，他的`build`方法在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
+
+从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，其的`build`方法实现在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
+
 ```
-@Override
-  public ManagedChannel build() {
-    return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
-        this,
-        buildTransportFactory(),
-        // TODO(carl-mastrangelo): Allow clients to pass this in
-        new ExponentialBackoffPolicy.Provider(),
-        SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
-        GrpcUtil.STOPWATCH_SUPPLIER,
-        getEffectiveInterceptors(),
-        TimeProvider.SYSTEM_TIME_PROVIDER));
-  }
+public ManagedChannel build() {
+	return new ManagedChannelOrphanWrapper(new ManagedChannelImpl(
+		this,
+		buildTransportFactory(),
+		// TODO(carl-mastrangelo): Allow clients to pass this in
+		new ExponentialBackoffPolicy.Provider(),
+		SharedResourcePool.forResource(GrpcUtil.SHARED_CHANNEL_EXECUTOR),
+		GrpcUtil.STOPWATCH_SUPPLIER,
+		getEffectiveInterceptors(),
+		TimeProvider.SYSTEM_TIME_PROVIDER));
+}
 ```  
-从功能上看`io.grpc.internal.ManagedChannelOrphanWrapper`没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
 
-`io.grpc.internal.ManagedChannelImpl`构造方法的几个参数中，除了第一个参数是builder本身，第二个参数是用来创建Tranport的Factory，第三个参数是后台连接重试策略，第四个参数是gRPC的全局线程池，第五个和第七个都是和时间相关的对象，主要用于日志中，第六个是客户端调用时的interceptor。`buildTransportFactory`的实现方法会`io.grpc.netty.NettyChannelBuilder`，会创建一个`io.grpc.netty.NettyChannelBuilder.NettyTransportFactory`。
+`io.grpc.internal.ManagedChannelOrphanWrapper`和`io.grpc.internal.ManagedChannelImpl`其实都是`io.grpc.ManagedChannel`的实现。`io.grpc.internal.ManagedChannelOrphanWrapper`从功能上分析没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
 
+`io.grpc.internal.ManagedChannelImpl`构造方法的几个参数中，除了第一个参数是builder本身，第二个参数是用来创建Transport的Factory，第三个参数是后台连接重试策略，第四个参数是gRPC的全局线程池，第五个和第七个都是和时间相关的对象，主要用于日志中，第六个是客户端调用时的interceptor。在`io.grpc.netty.NettyChannelBuilder`中，`buildTransportFactory`方法会创建一个`io.grpc.netty.NettyChannelBuilder.NettyTransportFactory`。
 
+## 服务发现
 
-## 发现服务端
-
-前文的入门示例客户端中直接写了host和port，那么不免让人产生疑问，如果有多个可以提供服务的Server如何处理。。在`io.grpc.ManagedChannelBuilder`中有一个`nameResolverFactory`方法，可以指定如何解析`target`地址，用来发现服务端。
+前文的入门示例中直接写了target，只能连接单个Server。如果有多个可以提供服务的Server，那么就需要有一种方式通过单个target发现这些Server。在`io.grpc.ManagedChannelBuilder`中有一个`nameResolverFactory`方法，可以用来指定如何解析`target`地址，发现多个服务端。
 
 ### `nameResolverFactory`方法
-这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolve.Factory`实现的话会使用用户的`io.grpc.NameResolve.Factroy`实现，否则会使用`io.grpc.NameResolverRegistry`的默认实现。
-```
-final NameResolverRegistry nameResolverRegistry = NameResolverRegistry.getDefaultRegistry();
 
-@Override
-  public final T nameResolverFactory(NameResolver.Factory resolverFactory) {
-    Preconditions.checkState(directServerAddress == null,
-        "directServerAddress is set (%s), which forbids the use of NameResolverFactory",
-        directServerAddress);
-    if (resolverFactory != null) {
-      this.nameResolverFactory = resolverFactory;
-    } else {
-      this.nameResolverFactory = nameResolverRegistry.asFactory();
-    }
-    return thisT();
-  }
+这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolver.Factory`实现的话通过`nameResolverFactory`,gRPC就会使用用户自己的`io.grpc.NameResolver.Factroy`实现代替gRPC自己的默认实现，否则会使用`io.grpc.NameResolverRegistry`中的默认实现。
+
+`io.grpc.NameResolverRegistry`会通过硬编码加载`io.grpc.NameResolverProvider`实现，并创建一个与之有关的`io.grpc.NameResolver.Factory`的实现。目前硬编码加载的`io.grpc.NameResolverProvider`实现只有`io.grpc.internal.DnsNameResolverProvider`一种。
+
 ```
-`io.grpc.NameResolverRegistry`会通过硬编码加载`io.grpc.NameResolverProvider`实现，并创建一个与之有关的`io.grpc.NameResolve.Factory`的实现。目前硬编码加载的`io.grpc.NameResolverProvider`实现只有`io.grpc.internal.DnsNameResolverProvider`一种。
-```
-private static NameResolverRegistry instance;
 private final NameResolver.Factory factory = new NameResolverFactory();
 @GuardedBy("this")
 private final LinkedHashSet<NameResolverProvider> allProviders = new LinkedHashSet<>();
 
 private synchronized void addProvider(NameResolverProvider provider) {
-    checkArgument(provider.isAvailable(), "isAvailable() returned false");
-    allProviders.add(provider);
-  }
-/**
-   * Returns the default registry that loads providers via the Java service loader mechanism.
-   */
-  public static synchronized NameResolverRegistry getDefaultRegistry() {
-    if (instance == null) {
-      List<NameResolverProvider> providerList = ServiceProviders.loadAll(
-          NameResolverProvider.class,
-          getHardCodedClasses(),
-          NameResolverProvider.class.getClassLoader(),
-          new NameResolverPriorityAccessor());
-      if (providerList.isEmpty()) {
-        logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
-            + "is probably due to a broken build. If using ProGuard, check your configuration");
-      }
-      instance = new NameResolverRegistry();
-      for (NameResolverProvider provider : providerList) {
-        logger.fine("Service loader found " + provider);
-        if (provider.isAvailable()) {
-          instance.addProvider(provider);
-        }
-      }
-      instance.refreshProviders();
-    }
-    return instance;
-  }
-  
+	checkArgument(provider.isAvailable(), "isAvailable() returned false");
+	allProviders.add(provider);
+}
 
-  public NameResolver.Factory asFactory() {
-    return factory;
-  }
+public static synchronized NameResolverRegistry getDefaultRegistry() {
+	if (instance == null) {
+		List<NameResolverProvider> providerList = ServiceProviders.loadAll(
+			NameResolverProvider.class,
+			getHardCodedClasses(),
+			NameResolverProvider.class.getClassLoader(),
+			new NameResolverPriorityAccessor());
+		if (providerList.isEmpty()) {
+			logger.warning("No NameResolverProviders found via ServiceLoader, including for DNS. This "
+			+ "is probably due to a broken build. If using ProGuard, check your configuration");
+		}
+		instance = new NameResolverRegistry();
+		for (NameResolverProvider provider : providerList) {
+			logger.fine("Service loader found " + provider);
+			if (provider.isAvailable()) {
+				instance.addProvider(provider);
+			}
+		}
+		instance.refreshProviders();
+	}
+	return instance;
+}  
 
-  @VisibleForTesting
-  static List<Class<?>> getHardCodedClasses() {
-    // Class.forName(String) is used to remove the need for ProGuard configuration. Note that
-    // ProGuard does not detect usages of Class.forName(String, boolean, ClassLoader):
-    // https://sourceforge.net/p/proguard/bugs/418/
-    ArrayList<Class<?>> list = new ArrayList<>();
-    try {
-      list.add(Class.forName("io.grpc.internal.DnsNameResolverProvider"));
-    } catch (ClassNotFoundException e) {
-      logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
-    }
-    return Collections.unmodifiableList(list);
-  }
+public NameResolver.Factory asFactory() {
+	return factory;
+}
 
-  private final class NameResolverFactory extends NameResolver.Factory {
-    @Override
-    @Nullable
-    public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
-      List<NameResolverProvider> providers = providers();
-      for (NameResolverProvider provider : providers) {
-        NameResolver resolver = provider.newNameResolver(targetUri, args);
-        if (resolver != null) {
-          return resolver;
-        }
-      }
-      return null;
-    }
+@VisibleForTesting
+static List<Class<?>> getHardCodedClasses() {
+	ArrayList<Class<?>> list = new ArrayList<>();
+	try {
+		list.add(Class.forName("io.grpc.internal.DnsNameResolverProvider"));
+	} catch (ClassNotFoundException e) {
+		logger.log(Level.FINE, "Unable to find DNS NameResolver", e);
+	}
+	return Collections.unmodifiableList(list);
+}
 
-    @Override
-    public String getDefaultScheme() {
-      List<NameResolverProvider> providers = providers();
-      if (providers.isEmpty()) {
-        return "unknown";
-      }
-      return providers.get(0).getDefaultScheme();
-    }
-  }
-```
-`getDefaultSchema`会匹配`target`中的schema（如http），如果匹配的上，就使用相应的`NameResolver.Factory`，返回`NameResolver`决定真正的服务访问地址。
-### `io.grpc.NameResolver`
-我们来看`io.grpc.NameResolver`
-```
-public abstract class NameResolver {
-  /**
-   * Returns the authority used to authenticate connections to servers.  It <strong>must</strong> be
-   * from a trusted source, because if the authority is tampered with, RPCs may be sent to the
-   * attackers which may leak sensitive user data.
-   *
-   * <p>An implementation must generate it without blocking, typically in line, and
-   * <strong>must</strong> keep it unchanged. {@code NameResolver}s created from the same factory
-   * with the same argument must return the same authority.
-   *
-   * @since 1.0.0
-   */
-  public abstract String getServiceAuthority();
+private final class NameResolverFactory extends NameResolver.Factory {
+	@Override
+	@Nullable
+	public NameResolver newNameResolver(URI targetUri, NameResolver.Args args) {
+		List<NameResolverProvider> providers = providers();
+		for (NameResolverProvider provider : providers) {
+			NameResolver resolver = provider.newNameResolver(targetUri, args);
+			if (resolver != null) {
+				return resolver;
+			}
+		}
+		return null;
+	}
 
-  /**
-   * Starts the resolution.
-   *
-   * @param listener used to receive updates on the target
-   * @since 1.0.0
-   */
-  public void start(final Listener listener) {
-    if (listener instanceof Listener2) {
-      start((Listener2) listener);
-    } else {
-      start(new Listener2() {
-          @Override
-          public void onError(Status error) {
-            listener.onError(error);
-          }
-
-          @Override
-          public void onResult(ResolutionResult resolutionResult) {
-            listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
-          }
-      });
-    }
-  }
-
-  /**
-   * Starts the resolution.
-   *
-   * @param listener used to receive updates on the target
-   * @since 1.21.0
-   */
-  public void start(Listener2 listener) {
-    start((Listener) listener);
-  }
-
-  /**
-   * Stops the resolution. Updates to the Listener will stop.
-   *
-   * @since 1.0.0
-   */
-  public abstract void shutdown();
-
-  /**
-   * Re-resolve the name.
-   *
-   * <p>Can only be called after {@link #start} has been called.
-   *
-   * <p>This is only a hint. Implementation takes it as a signal but may not start resolution
-   * immediately. It should never throw.
-   *
-   * <p>The default implementation is no-op.
-   *
-   * @since 1.0.0
-   */
-  public void refresh() {}
-
-  /**
-   * Receives address updates.
-   *
-   * <p>All methods are expected to return quickly.
-   *
-   * @since 1.0.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  @ThreadSafe
-  public interface Listener {
-    /**
-     * Handles updates on resolved addresses and attributes.
-     *
-     * <p>Implementations will not modify the given {@code servers}.
-     *
-     * @param servers the resolved server addresses. An empty list will trigger {@link #onError}
-     * @param attributes extra information from naming system.
-     * @since 1.3.0
-     */
-    void onAddresses(
-        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes);
-
-    /**
-     * Handles an error from the resolver. The listener is responsible for eventually invoking
-     * {@link #refresh()} to re-attempt resolution.
-     *
-     * @param error a non-OK status
-     * @since 1.0.0
-     */
-    void onError(Status error);
-  }
-
-  /**
-   * Receives address updates.
-   *
-   * <p>All methods are expected to return quickly.
-   *
-   * <p>This is a replacement API of {@code Listener}. However, we think this new API may change
-   * again, so we aren't yet encouraging mass-migration to it. It is fine to use and works.
-   *
-   * @since 1.21.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public abstract static class Listener2 implements Listener {
-    /**
-     * @deprecated This will be removed in 1.22.0
-     */
-    @Override
-    @Deprecated
-    public final void onAddresses(
-        List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
-      onResult(
-          ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
-    }
-
-    /**
-     * Handles updates on resolved addresses and attributes.  If
-     * {@link ResolutionResult#getAddresses()} is empty, {@link #onError(Status)} will be called.
-     *
-     * @param resolutionResult the resolved server addresses, attributes, and Service Config.
-     * @since 1.21.0
-     */
-    public abstract void onResult(ResolutionResult resolutionResult);
-
-    /**
-     * Handles an error from the resolver. The listener is responsible for eventually invoking
-     * {@link NameResolver#refresh()} to re-attempt resolution.
-     *
-     * @param error a non-OK status
-     * @since 1.21.0
-     */
-    @Override
-    public abstract void onError(Status error);
-  }
-
-  /**
-   * Represents the results from a Name Resolver.
-   *
-   * @since 1.21.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public static final class ResolutionResult {
-    private final List<EquivalentAddressGroup> addresses;
-    @ResolutionResultAttr
-    private final Attributes attributes;
-    @Nullable
-    private final ConfigOrError serviceConfig;
-
-    ResolutionResult(
-        List<EquivalentAddressGroup> addresses,
-        @ResolutionResultAttr Attributes attributes,
-        ConfigOrError serviceConfig) {
-      this.addresses = Collections.unmodifiableList(new ArrayList<>(addresses));
-      this.attributes = checkNotNull(attributes, "attributes");
-      this.serviceConfig = serviceConfig;
-    }
-
-    /**
-     * Constructs a new builder of a name resolution result.
-     *
-     * @since 1.21.0
-     */
-    public static Builder newBuilder() {
-      return new Builder();
-    }
-
-    /**
-     * Converts these results back to a builder.
-     *
-     * @since 1.21.0
-     */
-    public Builder toBuilder() {
-      return newBuilder()
-          .setAddresses(addresses)
-          .setAttributes(attributes)
-          .setServiceConfig(serviceConfig);
-    }
-
-    /**
-     * Gets the addresses resolved by name resolution.
-     *
-     * @since 1.21.0
-     */
-    public List<EquivalentAddressGroup> getAddresses() {
-      return addresses;
-    }
-
-    /**
-     * Gets the attributes associated with the addresses resolved by name resolution.  If there are
-     * no attributes, {@link Attributes#EMPTY} will be returned.
-     *
-     * @since 1.21.0
-     */
-    @ResolutionResultAttr
-    public Attributes getAttributes() {
-      return attributes;
-    }
-
-    /**
-     * Gets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
-     *
-     * @since 1.21.0
-     */
-    @Nullable
-    public ConfigOrError getServiceConfig() {
-      return serviceConfig;
-    }
-
-    @Override
-    public String toString() {
-      return MoreObjects.toStringHelper(this)
-          .add("addresses", addresses)
-          .add("attributes", attributes)
-          .add("serviceConfig", serviceConfig)
-          .toString();
-    }
-
-    /**
-     * Useful for testing.  May be slow to calculate.
-     */
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof ResolutionResult)) {
-        return false;
-      }
-      ResolutionResult that = (ResolutionResult) obj;
-      return Objects.equal(this.addresses, that.addresses)
-          && Objects.equal(this.attributes, that.attributes)
-          && Objects.equal(this.serviceConfig, that.serviceConfig);
-    }
-
-    /**
-     * Useful for testing.  May be slow to calculate.
-     */
-    @Override
-    public int hashCode() {
-      return Objects.hashCode(addresses, attributes, serviceConfig);
-    }
-
-    /**
-     * A builder for {@link ResolutionResult}.
-     *
-     * @since 1.21.0
-     */
-    @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-    public static final class Builder {
-      private List<EquivalentAddressGroup> addresses = Collections.emptyList();
-      private Attributes attributes = Attributes.EMPTY;
-      @Nullable
-      private ConfigOrError serviceConfig;
-      //  Make sure to update #toBuilder above!
-
-      Builder() {}
-
-      /**
-       * Sets the addresses resolved by name resolution.  This field is required.
-       *
-       * @since 1.21.0
-       */
-      public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
-        this.addresses = addresses;
-        return this;
-      }
-
-      /**
-       * Sets the attributes for the addresses resolved by name resolution.  If unset,
-       * {@link Attributes#EMPTY} will be used as a default.
-       *
-       * @since 1.21.0
-       */
-      public Builder setAttributes(Attributes attributes) {
-        this.attributes = attributes;
-        return this;
-      }
-
-      /**
-       * Sets the Service Config parsed by {@link NameResolver.Helper#parseServiceConfig(Map)}.
-       * This field is optional.
-       *
-       * @since 1.21.0
-       */
-      public Builder setServiceConfig(@Nullable ConfigOrError serviceConfig) {
-        this.serviceConfig = serviceConfig;
-        return this;
-      }
-
-      /**
-       * Constructs a new {@link ResolutionResult} from this builder.
-       *
-       * @since 1.21.0
-       */
-      public ResolutionResult build() {
-        return new ResolutionResult(addresses, attributes, serviceConfig);
-      }
-    }
-  }
-  
-  /**
-   * Gets the attributes associated with the addresses resolved by name resolution.  If there are
-   * no attributes, {@link Attributes#EMPTY} will be returned.
-   *
-   * @since 1.21.0
-   */
-  @ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
-  public static final class ConfigOrError {
-
-    /**
-     * Returns a {@link ConfigOrError} for the successfully parsed config.
-     */
-    public static ConfigOrError fromConfig(Object config) {
-      return new ConfigOrError(config);
-    }
-
-    /**
-     * Returns a {@link ConfigOrError} for the failure to parse the config.
-     *
-     * @param status a non-OK status
-     */
-    public static ConfigOrError fromError(Status status) {
-      return new ConfigOrError(status);
-    }
-
-    private final Status status;
-    private final Object config;
-
-    private ConfigOrError(Object config) {
-      this.config = checkNotNull(config, "config");
-      this.status = null;
-    }
-
-    private ConfigOrError(Status status) {
-      this.config = null;
-      this.status = checkNotNull(status, "status");
-      checkArgument(!status.isOk(), "cannot use OK status: %s", status);
-    }
-
-    /**
-     * Returns config if exists, otherwise null.
-     */
-    @Nullable
-    public Object getConfig() {
-      return config;
-    }
-
-    /**
-     * Returns error status if exists, otherwise null.
-     */
-    @Nullable
-    public Status getError() {
-      return status;
-    }
-
-    @Override
-    public String toString() {
-      if (config != null) {
-        return MoreObjects.toStringHelper(this)
-            .add("config", config)
-            .toString();
-      } else {
-        assert status != null;
-        return MoreObjects.toStringHelper(this)
-            .add("error", status)
-            .toString();
-      }
-    }
-  }
+	@Override
+	public String getDefaultScheme() {
+		List<NameResolverProvider> providers = providers();
+		if (providers.isEmpty()) {
+			return "unknown";
+		}
+		return providers.get(0).getDefaultScheme();
+	}
 }
 ```
+
+`getDefaultSchema`会匹配`target`中的schema（如http），如果匹配的上，就使用相应的`NameResolver.Factory`，返回`NameResolver`决定真正的服务访问地址。
+
+### `io.grpc.NameResolver`
+
+我们来看`io.grpc.NameResolver`
+
+```
+public abstract class NameResolver {
+
+	public abstract String getServiceAuthority();
+	
+	public void start(final Listener listener) {
+	if (listener instanceof Listener2) {
+			start((Listener2) listener);
+		} else {
+			start(new Listener2() {
+				@Override
+				public void onError(Status error) {
+				listener.onError(error);
+				}
+
+				@Override
+				public void onResult(ResolutionResult resolutionResult) {
+					listener.onAddresses(resolutionResult.getAddresses(), resolutionResult.getAttributes());
+				}
+			});
+		}
+	}
+
+	public void start(Listener2 listener) {
+		start((Listener) listener);
+	}
+	
+	public abstract void shutdown();
+	
+	public void refresh() {}
+	
+	@ThreadSafe
+	public interface Listener {
+
+		void onAddresses(List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes);
+
+		void onError(Status error);
+	}
+
+	public abstract static class Listener2 implements Listener {
+
+		@Override
+		public final void onAddresses(
+			List<EquivalentAddressGroup> servers, @ResolutionResultAttr Attributes attributes) {
+			onResult(
+			ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attributes).build());
+		}
+
+		public abstract void onResult(ResolutionResult resolutionResult);
+
+		@Override
+		public abstract void onError(Status error);
+	}
+
+	public static final class ResolutionResult {
+		private final List<EquivalentAddressGroup> addresses;
+		@ResolutionResultAttr
+		private final Attributes attributes;
+		@Nullable
+		private final ConfigOrError serviceConfig;
+
+		ResolutionResult(
+			List<EquivalentAddressGroup> addresses,
+			@ResolutionResultAttr Attributes attributes,
+			ConfigOrError serviceConfig) {
+			this.addresses = Collections.unmodifiableList(new ArrayList<>(addresses));
+			this.attributes = checkNotNull(attributes, "attributes");
+			this.serviceConfig = serviceConfig;
+		}
+
+		public static Builder newBuilder() {
+		  return new Builder();
+		}
+
+		public Builder toBuilder() {
+		  return newBuilder()
+			  .setAddresses(addresses)
+			  .setAttributes(attributes)
+			  .setServiceConfig(serviceConfig);
+		}
+
+		public List<EquivalentAddressGroup> getAddresses() {
+		  return addresses;
+		}
+
+		@ResolutionResultAttr
+		public Attributes getAttributes() {
+		  return attributes;
+		}
+
+		@Nullable
+		public ConfigOrError getServiceConfig() {
+		  return serviceConfig;
+		}
+
+		@ExperimentalApi("https://github.com/grpc/grpc-java/issues/1770")
+		public static final class Builder {
+			private List<EquivalentAddressGroup> addresses = Collections.emptyList();
+			private Attributes attributes = Attributes.EMPTY;
+			@Nullable
+			private ConfigOrError serviceConfig;
+			Builder() {}
+
+			public Builder setAddresses(List<EquivalentAddressGroup> addresses) {
+				this.addresses = addresses;
+				return this;
+			}
+
+			public Builder setAttributes(Attributes attributes) {
+				this.attributes = attributes;
+				return this;
+			}
+
+			public Builder setServiceConfig(@Nullable ConfigOrError serviceConfig) {
+				this.serviceConfig = serviceConfig;
+				return this;
+			}
+
+			public ResolutionResult build() {
+				return new ResolutionResult(addresses, attributes, serviceConfig);
+			}
+		}
+	}
+}
+```
+
 在客户端首次连接服务端的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。`Listener2`可以接收服务端地址，用来返回真实的服务地址。
 
 ###`io.grpc.internal.DnsNameResolver`
+
 由于gRPC支持长连接，所以如果直连的话只会访问一个域名下的一台服务器，即首次连接时通过DNS返回IP地址。`io.grpc.internal.DnsNameResolverProvider`是对`io.grpc.internal.DnsNameResolver`的简单封装，只支持以`dns://`开头的地址。`io.grpc.internal.DnsNameResolver`会根据`target`获取该host下所有关联的IP，即通过DNS解析出所有的服务端IP地址。
+
 ```
 public final class DnsNameResolverProvider extends NameResolverProvider {
 
