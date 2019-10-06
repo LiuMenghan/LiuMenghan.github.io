@@ -416,18 +416,21 @@ public class RouteGuideClient {
 }
 ```
 
-# gRPC代码详解
+# gRPC客户端代码详解
 
-gRPC将整个组件分为分为三层：Stub、Channel和Transport。
-Transport层承担了将字节从网络中取出和放入数据的工作，有三种实现Netty、okHttp、inProgress。gRPC认为Transport层属于内部代码，不保证其API的稳定性。
-Channel层是对Transport层功能的抽象，相比Stub层提供更多的功能，比如服务发现和负载均衡都是在这层实现的。
-gRPC附带的插件可以从.proto文件直接生成Stub层代码，开发人员通过直接调用Stub层的代码调用RPC服务。
+gRPC官方将自己分为三层组件：Stub、Channel和Transport。
 
-整个gRPC的代码比较多的，封装比较多，相对于interface更喜欢使用abstract class，相对于使用反射更喜欢使用硬编码，与大多数java项目的编码风格有很大差别，阅读起来很不习惯。在源码层面本文将关注下面这些方面：
-1.Channel的初始化过程;
-2.gRPC中的服务发现;
-3.gRPC中的负载均衡
-4.Client与Server之间的数据传输
+* Stub层是最上层的代码，gRPC附带的插件可以从.proto文件直接生成Stub层代码，开发人员通过直接调用Stub层的代码调用RPC服务
+* Channel层是对Transport层功能的抽象，同时提供了很多有用的功能，比如服务发现和负载均衡。。
+* Transport层承担了将字节从网络中取出和放入数据的工作，有三种实现Netty、okHttp、inProgress。Transport层是最底层的代码。
+
+整个grpc-java项目的代码比较多。从风格上来讲，封装比较多，相对于interface更喜欢使用abstract class，相对于反射更喜欢使用硬编码，而且大量使用了单线程异步调用造成调用栈断裂，与常见的java项目的编码风格有很大差别，阅读起来可能容易不习惯。
+
+在源码层面本文将关注下面这些方面：
+* Channel的初始化过程;
+* gRPC中的服务发现;
+* gRPC中的负载均衡
+* Client与Server之间的数据传输
 
 ## Channel的初始化过程
 
@@ -436,63 +439,55 @@ gRPC附带的插件可以从.proto文件直接生成Stub层代码，开发人员
 2.配置各种选项，不论如何配置，返回的总是`io.grpc.ManagedChannelBuilder`对象;
 3.调用build方法创建`io.grpc.ManagedChannel`。
 
-
 ### `forTarget`方法
-感觉gRPC这里设计比较繁琐。`forTarget`方法的实际功能**是把一个url赋值给`io.grpc.ManagedChannelBuilder`内部的`target`变量**，但是过程比较绕。
+gRPC这里设计比较繁琐，过程比较绕。`forTarget`方法的实际功能就是**把参数target赋值给`io.grpc.ManagedChannelBuilder`的内部变量`target`**，
 ```
-/**
-   * Creates a channel with a target string, which can be either a valid {@link
-   * NameResolver}-compliant URI, or an authority string.
-   *
-   */
-  public static ManagedChannelBuilder<?> forTarget(String target) {
-    return ManagedChannelProvider.provider().builderForTarget(target);
-  }
+public static ManagedChannelBuilder<?> forTarget(String target) {
+	return ManagedChannelProvider.provider().builderForTarget(target);
+}
 ```
-`io.grpc.ManagedChannelProvider.provider()`会返回一个`io.grpc.ManagedChannelProvider`实现，然后会调用这个实现的`buildForTarget`方法。有哪些`io.grpc.ManagedChannelProvider`实现是在`io.grpc.ManagedChannelProvider`中以硬编码实现的。
+`io.grpc.ManagedChannelProvider.provider()`会返回一个`io.grpc.ManagedChannelProvider`实现。有哪些`io.grpc.ManagedChannelProvider`实现是在`io.grpc.ManagedChannelProvider`中以硬编码形式确定的，这里其实存在利用反射改进的空间。
 ```
 private static final class HardcodedClasses implements Iterable<Class<?>> {
-    @Override
-    public Iterator<Class<?>> iterator() {
-      List<Class<?>> list = new ArrayList<>();
-      try {
-        list.add(Class.forName("io.grpc.okhttp.OkHttpChannelProvider"));
-      } catch (ClassNotFoundException ex) {
-        // ignore
-      }
-      try {
-        list.add(Class.forName("io.grpc.netty.NettyChannelProvider"));
-      } catch (ClassNotFoundException ex) {
-        // ignore
-      }
-      return list.iterator();
-    }
-  }
+	@Override
+	public Iterator<Class<?>> iterator() {
+		List<Class<?>> list = new ArrayList<>();
+		try {
+			list.add(Class.forName("io.grpc.okhttp.OkHttpChannelProvider"));
+		} catch (ClassNotFoundException ex) {
+			// ignore
+		}
+		try {
+			list.add(Class.forName("io.grpc.netty.NettyChannelProvider"));
+		} catch (ClassNotFoundException ex) {
+		// ignore
+		}
+		return list.iterator();
+	}
+}
 ```
-实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。因为我们配置里配置的是netty实现,所以就只分析netty实现，okhttp里的实现也是类似的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
+实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。如果像前面示例项目一样只配置了netty实现,那就只有netty的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
 ```
 public NettyChannelBuilder builderForTarget(String target) {
-    return NettyChannelBuilder.forTarget(target);
+	return NettyChannelBuilder.forTarget(target);
 }
 ```
 而`io.grpc.netty.NettyChannelBuilder`继承自`io.grpc.internal.AbstractManagedChannelImplBuilder`，`forTarget`方法实际上调用了父类的构造函数。
 ```
-@CheckReturnValue
-  NettyChannelBuilder(String target) {
-    super(target);
-  }
+NettyChannelBuilder(String target) {
+	super(target);
+}
 
-@CheckReturnValue
-  public static NettyChannelBuilder forTarget(String target) {
-    return new NettyChannelBuilder(target);
-  }
+public static NettyChannelBuilder forTarget(String target) {
+	return new NettyChannelBuilder(target);
+}
 ```
 `io.grpc.internal.AbstractManagedChannelImplBuilder`的构造函数主要作用是把参数赋值给`target`变量。
 ```
 protected AbstractManagedChannelImplBuilder(String target) {
-    this.target = Preconditions.checkNotNull(target, "target");
-    this.directServerAddress = null;
-  }
+	this.target = Preconditions.checkNotNull(target, "target");
+	this.directServerAddress = null;
+}
 ```
 ### `build`方法
 从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，他的`build`方法在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
