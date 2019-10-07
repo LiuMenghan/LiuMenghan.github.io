@@ -1,6 +1,13 @@
 ---
 title: gRPC客户端详解
+categories:
+- Java
+tags:
+- gRPC
+- RPC
 ---
+
+作者：寒歌
 
 # RPC框架的选择
 
@@ -521,7 +528,7 @@ public ManagedChannel build() {
 }
 ```
 
-`io.grpc.internal.ManagedChannelOrphanWrapper`和`io.grpc.internal.ManagedChannelImpl`其实都是`io.grpc.ManagedChannel`的实现。`io.grpc.internal.ManagedChannelOrphanWrapper`从功能上分析没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
+这里的`io.grpc.internal.ManagedChannelOrphanWrapper`和`io.grpc.internal.ManagedChannelImpl`其实都是`io.grpc.ManagedChannel`的实现。`io.grpc.internal.ManagedChannelOrphanWrapper`从功能上分析没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
 
 `io.grpc.internal.ManagedChannelImpl`构造方法的几个参数中，除了第一个参数是builder本身，第二个参数是用来创建Transport的Factory，第三个参数是后台连接重试策略，第四个参数是gRPC的全局线程池，第五个和第七个都是和时间相关的对象，主要用于日志中，第六个是客户端调用时的interceptor。在`io.grpc.netty.NettyChannelBuilder`中，`buildTransportFactory`方法会创建一个`io.grpc.netty.NettyChannelBuilder.NettyTransportFactory`。
 
@@ -789,7 +796,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 
 可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是执行了一个继承自`Runnable`的`Resolve`接口。
 
-![DnsNameResolver`](grpc-in-depth/DnsNameResolver-start.png)
+![DnsNameResolver](grpc-in-depth/DnsNameResolver-start.png)
 
 在有代理的情况下，`Resolve`的`resolveInternal`会根据代理返回的`ProxiedSocketAddress`创建`EquivalentAddressGroup`作为服务端列表返回，并设置空config；否则会调用`resolveAll`方法获取服务端列表，并调用`parseServiceConfig`方法设置config。`resolveAll`方法返回的`ResolutionResults`有三个变量`addresses`、`txtRecords`和`balancerAddresses`。
 
