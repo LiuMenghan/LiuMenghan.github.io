@@ -5,15 +5,21 @@
   
 
   
-  <title>Hexo</title>
+  <title>gRPC客户端详解 | Hexo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta property="og:type" content="website">
-<meta property="og:title" content="Hexo">
-<meta property="og:url" content="http://liumenghan.github.io/index.html">
+  <meta name="description" content="RPC框架的选择常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、gRPC等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。 框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概至少可以保证每两到三个月有一次小版本的更新）可以保证各种bu">
+<meta property="og:type" content="article">
+<meta property="og:title" content="gRPC客户端详解">
+<meta property="og:url" content="http://liumenghan.github.io/2019/10/07/grpc-in-depth/index.html">
 <meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="RPC框架的选择常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、gRPC等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。 框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概至少可以保证每两到三个月有一次小版本的更新）可以保证各种bu">
 <meta property="og:locale" content="default">
+<meta property="og:image" content="http://liumenghan.github.io/.io//starter-genenate-grpc.png">
+<meta property="og:updated_time" content="2019-10-07T11:24:06.161Z">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="Hexo">
+<meta name="twitter:title" content="gRPC客户端详解">
+<meta name="twitter:description" content="RPC框架的选择常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、gRPC等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。 框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概至少可以保证每两到三个月有一次小版本的更新）可以保证各种bu">
+<meta name="twitter:image" content="http://liumenghan.github.io/.io//starter-genenate-grpc.png">
   
     <link rel="alternate" href="/atom.xml" title="Hexo" type="application/atom+xml">
   
@@ -60,9 +66,7 @@
   </div>
 </header>
       <div class="outer">
-        <section id="main">
-  
-    <article id="post-grpc-in-depth" class="article article-type-post" itemscope itemprop="blogPost">
+        <section id="main"><article id="post-grpc-in-depth" class="article article-type-post" itemscope itemprop="blogPost">
   <div class="article-meta">
     <a href="/2019/10/07/grpc-in-depth/" class="article-date">
   <time datetime="2019-10-07T11:24:06.161Z" itemprop="datePublished">2019-10-07</time>
@@ -75,8 +79,8 @@
       <header class="article-header">
         
   
-    <h1 itemprop="name">
-      <a class="article-title" href="/2019/10/07/grpc-in-depth/">gRPC客户端详解</a>
+    <h1 class="article-title" itemprop="name">
+      gRPC客户端详解
     </h1>
   
 
@@ -636,11 +640,9 @@ blockingStub = GreetingGrpc.newBlockingStub(channel);</code></pre><p>}</p>
     </footer>
   </div>
   
-</article>
-
-
+    
   
-
+</article>
 
 </section>
         
