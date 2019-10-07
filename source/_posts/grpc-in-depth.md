@@ -789,132 +789,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 
 可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是使用执行了一个继承自`Runnable`的`Resolve`接口。
 
-```
-@Override
-public void start(Listener2 listener) {
-	Preconditions.checkState(this.listener == null, "already started");
-	executor = SharedResourceHolder.get(executorResource);
-	this.listener = Preconditions.checkNotNull(listener, "listener");
-	resolve();
-}
-
-private void resolve() {
-	if (resolving || shutdown || !cacheRefreshRequired()) {
-		return;
-	}
-	resolving = true;
-	executor.execute(new Resolve(listener));
-}
-
-private final class Resolve implements Runnable {
-	private final Listener2 savedListener;
-
-	Resolve(Listener2 savedListener) {
-	  this.savedListener = Preconditions.checkNotNull(savedListener, "savedListener");
-	}
-
-	@Override
-	public void run() {
-		if (logger.isLoggable(Level.FINER)) {
-			logger.finer("Attempting DNS resolution of " + host);
-		}
-		try {
-			resolveInternal();
-		} finally {
-			syncContext.execute(new Runnable() {
-				@Override
-				public void run() {
-					resolving = false;
-				}
-			});
-		}
-	}
-
-	@VisibleForTesting
-	void resolveInternal() {
-		InetSocketAddress destination = InetSocketAddress.createUnresolved(host, port);
-		ProxiedSocketAddress proxiedAddr;
-		try {
-			proxiedAddr = proxyDetector.proxyFor(destination);
-		} catch (IOException e) {
-			savedListener.onError(
-			Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-			return;
-		}
-		if (proxiedAddr != null) {
-			if (logger.isLoggable(Level.FINER)) {
-				logger.finer("Using proxy address " + proxiedAddr);
-			}
-			EquivalentAddressGroup server = new EquivalentAddressGroup(proxiedAddr);
-			ResolutionResult resolutionResult =
-			ResolutionResult.newBuilder()
-				.setAddresses(Collections.singletonList(server))
-				.setAttributes(Attributes.EMPTY)
-				.build();
-			savedListener.onResult(resolutionResult);
-			return;
-		}
-
-		ResolutionResults resolutionResults;
-		try {
-			ResourceResolver resourceResolver = null;
-			if (shouldUseJndi(enableJndi, enableJndiLocalhost, host)) {
-				resourceResolver = getResourceResolver();
-			}
-			final ResolutionResults results = resolveAll(
-				addressResolver,
-				resourceResolver,
-				enableSrv,
-				enableTxt,
-				host);
-			resolutionResults = results;
-			syncContext.execute(new Runnable() {
-				@Override
-				public void run() {
-					cachedResolutionResults = results;
-					if (cacheTtlNanos > 0) {
-						stopwatch.reset().start();
-					}
-				}
-			});
-		} catch (Exception e) {
-			savedListener.onError(
-				Status.UNAVAILABLE.withDescription("Unable to resolve host " + host).withCause(e));
-			return;
-		}
-		List<EquivalentAddressGroup> servers = new ArrayList<>();
-		for (InetAddress inetAddr : resolutionResults.addresses) {
-			servers.add(new EquivalentAddressGroup(new InetSocketAddress(inetAddr, port)));
-		}
-		servers.addAll(resolutionResults.balancerAddresses);
-		if (servers.isEmpty()) {
-			savedListener.onError(Status.UNAVAILABLE.withDescription(
-				"No DNS backend or balancer addresses found for " + host));
-			return;
-		}
-
-		Attributes.Builder attrs = Attributes.newBuilder();
-		if (!resolutionResults.txtRecords.isEmpty()) {
-			ConfigOrError serviceConfig =
-			parseServiceConfig(resolutionResults.txtRecords, random, getLocalHostname());
-			if (serviceConfig != null) {
-				if (serviceConfig.getError() != null) {
-					savedListener.onError(serviceConfig.getError());
-					return;
-				} else {
-					@SuppressWarnings("unchecked")
-					Map<String, ?> config = (Map<String, ?>) serviceConfig.getConfig();
-					attrs.set(GrpcAttributes.NAME_RESOLVER_SERVICE_CONFIG, config);
-				}
-			}
-		}
-
-		ResolutionResult resolutionResult =
-		ResolutionResult.newBuilder().setAddresses(servers).setAttributes(attrs.build()).build();
-		savedListener.onResult(resolutionResult);
-	}
-}
-```
+![DnsNameResolver`](grpc-in-depth/DnsNameResolver-start.png)
 
 在有代理的情况下，`Resolve`的`resolveInternal`会根据代理返回的`ProxiedSocketAddress`创建`EquivalentAddressGroup`作为服务端列表返回，并设置空config；否则会调用`resolveAll`方法获取服务端列表，并调用`parseServiceConfig`方法设置config。`resolveAll`方法返回的`ResolutionResults`有三个变量`addresses`、`txtRecords`和`balancerAddresses`。
 
@@ -985,12 +860,14 @@ static ResolutionResults resolveAll(
 `addressResolver`的`resolveAddress`方法实际是调用JDK的`java.net.InetAddress`的`getAllByName`方法，即根据host通过DNS返回一系列服务端列表。`resourceResolver`根据LDAP协议获取指定命名空间下的服务端列表地址。`txtRecords`和`balancerAddresses`是和LDAP相关的参数，方法入参`requestSrvRecords`和`requestTxtRecords`的默认值都是false。由于LDAP不是特别常用，这里就不深入展开了。
 
 ### `NameResolverListener`的`onResult`
+
 当`NameResolverListener`获取解析结果后会调用`onResult`方法，进而会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法。
 ![获取解析结果后调用handleResolvedAddresses方法](grpc-in-depth/call-handle-resolved-response.png)
 
 ## 负载均衡
 
 `io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡`io.grpc.LoadBalancer`的具体实现。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
+![defaultLoadBalancingPolicy方法](grpc-in-depth/defaultLoadBalancingPolicy.png)
 
 ### `io.grpc.LoadBalancer.SubchannelPicker`
 
@@ -1039,38 +916,9 @@ public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
 
 如果是首次调用(subchannel == null) 会创建subchannel，其实现是`io.grpc.internal.ManagedChannelImpl.SubchannelImpl`，创建的过程中会创建`io.grpc.internal.InternalSubchannel`。然后调用`io.grpc.internal.ManagedChannelImpl`的`updateBalancingState`方法，把`subchannelPicker`更新为实现`Picker`，然后开启subchannel的连接。
 
+![开启subchannel链接](grpc-in-depth/start-subchannel.png)
 
 在开启subchannel的连接过程中，会调用`io.grpc.internal.InternalSubchannel`的`obtainActiveTransport`方法。
-
-```
-@Override
-public ClientTransport obtainActiveTransport() {
-	ClientTransport savedTransport = activeTransport;
-	if (savedTransport != null) {
-		return savedTransport;
-	}
-	syncContext.execute(new Runnable() {
-		@Override
-		public void run() {
-			if (state.getState() == IDLE) {
-			  channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
-			  gotoNonErrorState(CONNECTING);
-			  startNewTransport();
-			}
-		}
-	});
-	return null;
-}
-```
-
-在`startNewTransport`中，会获取真正的`io.grpc.internal.ConnectionClientTransport`实现。
-
-```
-ConnectionClientTransport transport =
-        new CallTracingTransport(
-            transportFactory
-                .newClientTransport(address, options, transportLogger), callsTracer);
-```
 
 这里的transportFactory就是上面提到`io.grpc.ManagedChannelBuilder`调用`build`初始化时调用`buildTransportFactory`方法返回的，依赖于Transport层的具体实现。在netty实现中，返回的是`io.grpc.netty.NettyClientTransport`。
 
@@ -1157,11 +1005,19 @@ public final void start(ClientStreamListener listener) {
 
 初始化结束后，调用requestObserver的`onNext`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法，将protobuf对象转换成`InputStream`，并作为参数调用`io.grpc.internal.ClientStream`的`writeMessage`方法，进而调用`io.grpc.internal.MessageFramer`的`writePayload`方法，最终调用`writeToOutputStream`方法将内容写入Http的OutputStream。如果是参数是stream形式会继续调用flush。
 
+![onNext](grpc-in-depth/request-on-next.png)
+
 调用requestObserver的`onCompleted`方法会调用`io.grpc.internal.ClientCallImpl`的`halfClose`方法，进而会调用`io.grpc.internal.MessageFramer`的`endOfMessages`，flush并结束发送消息。
+
+![onComplete](grpc-in-depth/request-on-complete.png)
 
 ### Response
 
+![onNext](grpc-in-depth/response-on-next.png)
+
 客户端接受到Response会调用ClientStreamListener的`messagesAvailable`方法，并通过同步线程池最终调用StreamObserver的`onNext`方法接收数据。
+
+![onComplete](grpc-in-depth/response-on-complete.png)
 
 当返回结束时会调用TransportState的`transportReportStatus`方法关闭请求，进而调用ClientStreamListener的`closed`方法关闭监听，进而调用StreamObserver的`onClose`方法。
 
