@@ -987,12 +987,28 @@ static ResolutionResults resolveAll(
 ## 负载均衡
 
 `io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡`io.grpc.LoadBalancer`的具体实现。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
-`io.grpc.LoadBalancer`的核心逻辑实际在`SubchannelPicker`中，`SubchannelPicker`中的`pickSubchannel`方法会返回选择的结果。
+
+### `io.grpc.LoadBalancer.SubchannelPicker`中
+
+`io.grpc.LoadBalancer`的核心逻辑实际在`SubchannelPicker`中。`pickSubchannel`方法会返回的PickResult中包含真正可用的subchannel，用来进行后续的数据传输。
+
 gRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin`。前者总会使用第一个可用的服务端，后者则是简单轮询。
 
-### `io.grpc.internal.PickFirstLoadBalancer`
+```
+public abstract static class SubchannelPicker {
+	/**
+	* Make a balancing decision for a new RPC.
+	*
+	* @param args the pick arguments
+	* @since 1.3.0
+	*/
+	public abstract PickResult pickSubchannel(PickSubchannelArgs args);
+}
+```
+### `io.grpc.internal.PickFirstLoadBalancer`的`handleResolvedAddresses`方法
 
 当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。
+
 ```
 @Override
   public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
@@ -1019,44 +1035,43 @@ gRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin
     }
   }
 ```
+
 如果是首次调用(subchannel == null) 会创建subchannel，其实现是`io.grpc.internal.ManagedChannelImpl.SubchannelImpl`，创建的过程中会创建`io.grpc.internal.InternalSubchannel`。然后调用`io.grpc.internal.ManagedChannelImpl`的`updateBalancingState`方法，把`subchannelPicker`更新为实现`Picker`，然后开启subchannel的连接。
 
 ## 传输
 
-gRPC客户端端会调用`io.grpc.internal.ManagedChannelImpl.ChannelTransportProvider`的`get`方法获取`io.grc.internal.ClientTransport`。调用栈如下：
-![ClientTransport获取ClientTransport的调用栈](grpc-in-depth/get-client-transport-stack.png)
+gRPC客户端发起Request时，stub会调用`ClientCalls`的`startCall`方法，最终会调用`io.grpc.internal.ManagedChannelImpl.ChannelTransportProvider`的`get`方法获取`io.grc.internal.ClientTransport`。
+
+![gRPC客户端发起Request时调用ChannelTransportProvider的get方法](grpc-in-depth/start-call.png)
 
 ```
 public ClientTransport get(PickSubchannelArgs args) {
-      SubchannelPicker pickerCopy = subchannelPicker;
-      if (shutdown.get()) {
-        // If channel is shut down, delayedTransport is also shut down which will fail the stream
-        // properly.
-        return delayedTransport;
-      }
-      if (pickerCopy == null) {
-        final class ExitIdleModeForTransport implements Runnable {
-          @Override
-          public void run() {
-            exitIdleMode();
-          }
-        }
-
-        syncContext.execute(new ExitIdleModeForTransport());
-        return delayedTransport;
-      }
-      PickResult pickResult = pickerCopy.pickSubchannel(args);
-      ClientTransport transport = GrpcUtil.getTransportFromPickResult(
-          pickResult, args.getCallOptions().isWaitForReady());
-      if (transport != null) {
-        return transport;
-      }
-      return delayedTransport;
-    }
+SubchannelPicker pickerCopy = subchannelPicker;
+	if (shutdown.get()) {
+		return delayedTransport;
+	}
+	if (pickerCopy == null) {
+		final class ExitIdleModeForTransport implements Runnable {
+			@Override
+			public void run() {
+				exitIdleMode();
+			}
+		}
+		syncContext.execute(new ExitIdleModeForTransport());
+		return delayedTransport;
+	}
+	PickResult pickResult = pickerCopy.pickSubchannel(args);
+	ClientTransport transport = GrpcUtil.getTransportFromPickResult(
+		pickResult, args.getCallOptions().isWaitForReady());
+	if (transport != null) {
+		return transport;
+	}
+	return delayedTransport;
+}
 ```
-### 首次调用
+如果subchannelPicker存在，会使用subchannelPicker进行选择；如果是首次访问服务端时subchannel肯定不存在，会使用syncContext异步执行`exitIdleMode`方法初始化。syncContext是一个**单线程执行队列，可以保证先提交的任务先执行**。delayedTransport的执行也依赖于syncContext，这就保证了delayedTransport中的方法执行一定会在`exitIdleMode`方法之后。
 
-如果subchannelPicker存在，会使用subchannelPicker进行选择，否则会初始化NameResolver和LoadBalancer。ExitIdleModeForTransport、delayedTransport会被依次放到同步队列中，保证delayedTransport的传输一定会发生在subchannelPicker初始化完成后。
+### 首次访问服务端时执行`exidIdleMode`方法
 
 `exitIdleMode`方法会初始化NameResolver和LoadBalancer，并会启动NameResolverListener。
 
@@ -1123,9 +1138,6 @@ ConnectionClientTransport transport =
                 .newClientTransport(address, options, transportLogger), callsTracer);
 ```
 这里的transportFactory就是上面提到`io.grpc.ManagedChannelBuilder`调用`build`初始化时调用`buildTransportFactory`方法返回的，依赖于Transport层的具体实现。在netty实现中，返回的是`io.grpc.netty.NettyClientTransport`。
-
-
-### Http2简介
 
 ### 发送数据
 在首次调用时，因为subchannel还未开启，非首次调用会直接调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
