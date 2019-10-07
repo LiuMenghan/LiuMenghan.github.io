@@ -8,7 +8,7 @@ title: gRPC客户端详解
 	
 框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概至少可以保证每两到三个月有一次小版本的更新）可以保证各种bug早已暴露并修复，让我们可以更专注于我们自己的项目本身，而不是要担心究竟是我们自己的代码有问题还是框架本身就有问题。
 	
-重量级RPC框架有一个主要问题就是结构复杂，另外主语言之外的代码质量也不太容易保证。个人认为活跃的社区以及一个活跃的开源管理团队是这些重型RPC框架项目成功的必要前提条件。比如我们项目组试用过腾讯的Tars，C++同学表示没有任何问题，然后JAVA同学表示java版本的各种bug，提的pull request两个多月才有反馈，官方jar包将近两年没有更新过。
+重量级RPC框架有一个主要问题就是结构复杂，另外主语言之外的代码质量也不太容易保证。个人认为活跃的社区以及一个活跃的开源管理团队是这些重型RPC框架项目成功的必要前提条件。比如我们项目组试用过腾讯的Tars，C++同学表示没有任何问题，然后JAVA同学表示java版本有许多bug，修复bug的pull request需要两个多月才能得到merge，而官方jar包也将近两年没有更新过了。
 	
 轻量级rpc框架中，restful可以被视作标杆。由于restful基于http协议，天然被各种框架支持，而且非常灵活。restful的缺点有两方面，一是过于灵活，缺少根据协议生成服务端和客户端代码的工具，联调往往要花更多的时间；二是大部分序列化基于json或者xml，相对来讲效率不理想。和restful相比，其它很多轻量级框架都有这样或者那样的缺点，有的缺少跨语言支持（rmi），有的既繁琐又缺乏效率优势（webservice）。个人认为其中相对理想的是gRPC和Thrift。
 
@@ -21,13 +21,13 @@ Protobuf是一种google推出的非常流行的跨语言序列化/反序列化�
 * 有代码生成机制，而且可以支持多语言
 * 长连接、多路复用
 
-同时gRPC还提供了简单地服务发现和负载均衡功能。虽然这并不是gRPC框架的重点，但是开发者可以非常容易的自己扩展gRPC这些功能，实现自己的策略或应用最新的相关方面技术，而不用像重型Rpc框架一样受制于框架本身是否支持。
+同时gRPC还提供了简单地服务发现和负载均衡功能。虽然这并不是gRPC框架的重点，但是开发者可以非常容易的自己扩展gRPC这些功能，实现自己的策略或应用最新的相关方面技术，而不用像重型RPC框架一样受制于框架本身是否支持。
 
 ## gRPC与Thrift对比
 
 Thrift是Facebook推出的一种RPC框架，从性能上来讲远优于gRPC。但是在实际调研时发现有一个很麻烦的问题：Thrift的客户端是**线程不安全**的——这意味着在Spring中无法以单例形式注入到Bean中。解决方案有三种：
 1. 每次调用创建一个Thrift客户端。这不仅意味着额外的对象创建和垃圾回收开销，而且实际上相当于只使用了短链接，这是一个开发复杂度最低但是从性能上来讲最差的解决方案。
-2. 利用Pool，稍微复杂一点的解决方案，但是也非常成熟。但是问题在于一来要实现服务发现和负载均衡恐怕需要很多额外开发；二来恐怕要创建Pool数量\*服务端数量个客户端，内存开销会比较大。
+2. 利用Pool，稍微复杂一点的解决方案，但是也非常成熟。但是问题在于一来缺少服务发现和负载均衡恐实现，需要很多额外开发；二来需要创建Pool数量\*服务端数量个客户端，内存开销会比较大。
 3. 使用异步框架如Netty，可以成功避免创建过多的客户端，但是仍要自己实现服务发现和负载均衡，相对复杂。实际上Facebook有一个基于Netty的Thrift客户端，叫Nifty，但是快四年没更新了。。。
 
 相比较而言gRPC就友好多了，本身有简单而且可扩展的服务发现和负载均衡功能，底层基于Netty所以线程安全，在不需要极限压榨性能的情况下是非常好的选择。当然如果需要极限压榨性能Thrift也未必够看。
@@ -444,7 +444,7 @@ gRPC官方将自己分为三层组件：Stub、Channel和Transport。
 
 ### `forTarget`方法
 
-gRPC这里设计比较繁琐，过程比较绕。`forTarget`方法的实际功能就是**把参数target赋值给`io.grpc.ManagedChannelBuilder`的内部变量`target`**，
+gRPC这里设计比较繁琐，过程比较绕。`forTarget`方法的实际功能就是**把参数target赋值给`io.grpc.ManagedChannelBuilder`的内部变量`target`**。
 
 ```
 public static ManagedChannelBuilder<?> forTarget(String target) {
@@ -474,7 +474,7 @@ private static final class HardcodedClasses implements Iterable<Class<?>> {
 }
 ```
 
-实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。如果像前面示例项目一样只配置了netty实现,那就只有netty的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
+实际上就根据依赖的jar包不同就只有两个实现，一个netty的，一个okhttp的。如果像入门示例项目一样只配置了netty实现,那就只有netty的。`io.grpc.netty.NettyChannelProvider`的buildForTarget方法调用的是`io.grpc.netty.NettyChannelBuilder`的`forTarget`方法。
 
 ```
 public NettyChannelBuilder builderForTarget(String target) {
@@ -494,7 +494,7 @@ public static NettyChannelBuilder forTarget(String target) {
 }
 ```
 
-`io.grpc.internal.AbstractManagedChannelImplBuilder`的构造函数主要作用是把参数赋值给`target`变量。
+`io.grpc.internal.AbstractManagedChannelImplBuilder`的构造函数最终会是把参数赋值给`target`变量。
 
 ```
 protected AbstractManagedChannelImplBuilder(String target) {
@@ -505,7 +505,7 @@ protected AbstractManagedChannelImplBuilder(String target) {
 
 ### `build`方法
 
-从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，其的`build`方法实现在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
+从前文可以看到，实际初始化的`io.grpc.ManagedChannelBuilder`实际上是`io.grpc.netty.NettyChannelBuilder`，其`build`方法实现在其父类`io.grpc.internal.AbstractManagedChannelImplBuilder`中。
 
 ```
 public ManagedChannel build() {
@@ -519,7 +519,7 @@ public ManagedChannel build() {
 		getEffectiveInterceptors(),
 		TimeProvider.SYSTEM_TIME_PROVIDER));
 }
-```  
+```
 
 `io.grpc.internal.ManagedChannelOrphanWrapper`和`io.grpc.internal.ManagedChannelImpl`其实都是`io.grpc.ManagedChannel`的实现。`io.grpc.internal.ManagedChannelOrphanWrapper`从功能上分析没有任何作用，`io.grpc.internal.ManagedChannelOrphanWrapper`会为`io.grpc.ManagedChannel`创建弱引用，并被放置到ReferenceQueue中。如果Channel是单例的，那么意义不大；如果客户端被重复创建却没有被关闭，那么ReferenceQueue中会留下相应的引用记录，可能有助于排查问题。
 
@@ -531,7 +531,7 @@ public ManagedChannel build() {
 
 ### `nameResolverFactory`方法
 
-这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolver.Factory`实现的话通过`nameResolverFactory`,gRPC就会使用用户自己的`io.grpc.NameResolver.Factroy`实现代替gRPC自己的默认实现，否则会使用`io.grpc.NameResolverRegistry`中的默认实现。
+这个方法的实现也在`io.grpc.internal.AbstractManagedChannelImplBuilder`中，如果用户有自己的`io.grpc.NameResolver.Factory`实现的话可以通过`nameResolverFactory`方法指定,gRPC就会使用用户自己的`io.grpc.NameResolver.Factroy`实现代替gRPC自己的默认实现，否则会使用`io.grpc.NameResolverRegistry`中的默认实现。
 
 `io.grpc.NameResolverRegistry`会通过硬编码加载`io.grpc.NameResolverProvider`实现，并创建一个与之有关的`io.grpc.NameResolver.Factory`的实现。目前硬编码加载的`io.grpc.NameResolverProvider`实现只有`io.grpc.internal.DnsNameResolverProvider`一种。
 
@@ -608,7 +608,7 @@ private final class NameResolverFactory extends NameResolver.Factory {
 }
 ```
 
-`getDefaultSchema`会匹配`target`中的schema（如http），如果匹配的上，就使用相应的`NameResolver.Factory`，返回`NameResolver`决定真正的服务访问地址。
+`getDefaultSchema`会匹配`target`中的schema（如dns），如果匹配的上，就使用相应的`NameResolver.Factory`，返回`NameResolver`决定真正的服务访问地址。
 
 ### `io.grpc.NameResolver`
 
@@ -740,11 +740,11 @@ public abstract class NameResolver {
 }
 ```
 
-在客户端首次连接服务端的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。`Listener2`可以接收服务端地址，用来返回真实的服务地址。
+在客户端首次连接服务端的时候会调用`Listener2`的`start`方法，需要更新的时候会调用`refresh`方法。当`Listener2`接收到服务端地址时，会调用onResult方法。
 
 ### `io.grpc.internal.DnsNameResolver`
 
-由于gRPC支持长连接，所以如果直连的话只会访问一个域名下的一台服务器，即首次连接时通过DNS返回IP地址。`io.grpc.internal.DnsNameResolverProvider`是对`io.grpc.internal.DnsNameResolver`的简单封装，只支持以`dns://`开头的地址。`io.grpc.internal.DnsNameResolver`会根据`target`获取该host下所有关联的IP，即通过DNS解析出所有的服务端IP地址。
+由于gRPC支持长连接，所以如果直连的话只会访问一个域名下的一台服务器，即首次连接时通过DNS返回IP地址。`io.grpc.internal.DnsNameResolverProvider`是对`io.grpc.internal.DnsNameResolver`的简单封装，只支持以`dns:///`开头的地址。`io.grpc.internal.DnsNameResolver`会根据`target`获取该host下所有关联的IP，即通过DNS解析出所有的服务端IP地址。
 
 ```
 public final class DnsNameResolverProvider extends NameResolverProvider {
@@ -787,7 +787,7 @@ public final class DnsNameResolverProvider extends NameResolverProvider {
 }
 ```
 
-可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是使用执行了一个继承自`Runnable`的`Resolve`接口。
+可以看到`io.grpc.internal.DnsNameResolver`中的`start`和`refresh`方法都调用的是`resolve`方法，而`resolve`方法是执行了一个继承自`Runnable`的`Resolve`接口。
 
 ![DnsNameResolver`](grpc-in-depth/DnsNameResolver-start.png)
 
@@ -862,18 +862,17 @@ static ResolutionResults resolveAll(
 ### `NameResolverListener`的`onResult`
 
 当`NameResolverListener`获取解析结果后会调用`onResult`方法，进而会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法。
+
 ![获取解析结果后调用handleResolvedAddresses方法](grpc-in-depth/call-handle-resolved-response.png)
 
 ## 负载均衡
 
 `io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡`io.grpc.LoadBalancer`的具体实现。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
-![defaultLoadBalancingPolicy方法](grpc-in-depth/defaultLoadBalancingPolicy.png)
+![defaultLoadBalancingPolicy方法](grpc-in-depth/defaulLoadBalancingPolicy.png)
 
 ### `io.grpc.LoadBalancer.SubchannelPicker`
 
 `io.grpc.LoadBalancer`的核心逻辑实际在`SubchannelPicker`中。`pickSubchannel`方法会返回的PickResult中包含真正可用的subchannel，用来进行后续的数据传输。
-
-gRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin`。前者总会使用第一个可用的服务端，后者则是简单轮询。
 
 ```
 public abstract static class SubchannelPicker {
@@ -886,6 +885,9 @@ public abstract static class SubchannelPicker {
 	public abstract PickResult pickSubchannel(PickSubchannelArgs args);
 }
 ```
+
+gRPC默认提供了两种负载均衡实现策略：`prick_first`和`round_robin`。前者总会使用第一个可用的服务端，后者则是简单轮询。
+
 ### `handleResolvedAddresses`
 
 当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。
@@ -987,11 +989,14 @@ void exitIdleMode() {
 
 ### Request
 
-发送Request时会调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
+发送Request时会调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。
 
 ![调用newStream的调用栈](grpc-in-depth/calling-new-stream.png)
 
-在进行一系列http2设置后，会调用`io.grpc.internal.ClientStream`的`start`方法，为`TransportState`设置监听并通过`Sink`写入Header。
+netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
+
+在进行一系列http2相关设置后，会调用`io.grpc.internal.ClientStream`的`start`方法，为`TransportState`设置监听并通过`Sink`写入Header。
+
 ```
 @Override
 public final void start(ClientStreamListener listener) {
@@ -1023,7 +1028,7 @@ public final void start(ClientStreamListener listener) {
 
 ### gRPC通信格式
 
-gRPC发送的请求发送方法是POST，路径是/${serviceName}/${methodName},content-type为content-type = application/grpc+proto。
+gRPC发送的请求发送方法是POST，路径是/${serviceName}/${methodName}，content-type为content-type = application/grpc+proto。
 
 #### Request
 ```
