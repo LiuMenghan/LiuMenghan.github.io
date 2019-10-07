@@ -984,6 +984,10 @@ static ResolutionResults resolveAll(
 
 `addressResolver`的`resolveAddress`方法实际是调用JDK的`java.net.InetAddress`的`getAllByName`方法，即根据host通过DNS返回一系列服务端列表。`resourceResolver`根据LDAP协议获取指定命名空间下的服务端列表地址。`txtRecords`和`balancerAddresses`是和LDAP相关的参数，方法入参`requestSrvRecords`和`requestTxtRecords`的默认值都是false。由于LDAP不是特别常用，这里就不深入展开了。
 
+### `NameResolverListener`的`onResult`
+当`NameResolverListener`获取解析结果后会调用`onResult`方法，进而会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法。
+![获取解析结果后调用handleResolvedAddresses方法](grpc-in-depth/call-handle-resolved-response.png)
+
 ## 负载均衡
 
 `io.grpc.ManagedChannel`初始化的时候可以通过`defaultLoadBalancingPolicy`方法指定负载均衡策略，实际是根据`defaultLoadBalancingPolicy`创建了一个`io.grpc.internal.AutoConfiguredLoadBalancerFactory`对象。`io.grpc.internal.AutoConfiguredLoadBalancerFactory`则通过`io.grpc.LoadBalancerRegistry`获取对应名称的负载均衡策略。`io.grpc.LoadBalancerProvider`的`getPolicyName`方法指定负载均衡策略名称，`newLoadBalancer`返回负载均衡`io.grpc.LoadBalancer`的具体实现。如果想要添加自定义负载均衡策略，需要调用`io.grpc.LoadBalancerRegistry`的`registry`方法，并自己实现`io.grpc.LoadBalancerProvider`和`io.grpc.LoadBalancer`，并指定负载均衡策略名称即可。
@@ -1005,7 +1009,7 @@ public abstract static class SubchannelPicker {
 	public abstract PickResult pickSubchannel(PickSubchannelArgs args);
 }
 ```
-### `io.grpc.internal.PickFirstLoadBalancer`的`handleResolvedAddresses`方法
+### `handleResolvedAddresses`
 
 当服务端列表更新时，会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法更新可用的subchannel。
 
@@ -1034,6 +1038,41 @@ public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
 ```
 
 如果是首次调用(subchannel == null) 会创建subchannel，其实现是`io.grpc.internal.ManagedChannelImpl.SubchannelImpl`，创建的过程中会创建`io.grpc.internal.InternalSubchannel`。然后调用`io.grpc.internal.ManagedChannelImpl`的`updateBalancingState`方法，把`subchannelPicker`更新为实现`Picker`，然后开启subchannel的连接。
+
+
+在开启subchannel的连接过程中，会调用`io.grpc.internal.InternalSubchannel`的`obtainActiveTransport`方法。
+
+```
+@Override
+public ClientTransport obtainActiveTransport() {
+	ClientTransport savedTransport = activeTransport;
+	if (savedTransport != null) {
+		return savedTransport;
+	}
+	syncContext.execute(new Runnable() {
+		@Override
+		public void run() {
+			if (state.getState() == IDLE) {
+			  channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
+			  gotoNonErrorState(CONNECTING);
+			  startNewTransport();
+			}
+		}
+	});
+	return null;
+}
+```
+
+在`startNewTransport`中，会获取真正的`io.grpc.internal.ConnectionClientTransport`实现。
+
+```
+ConnectionClientTransport transport =
+        new CallTracingTransport(
+            transportFactory
+                .newClientTransport(address, options, transportLogger), callsTracer);
+```
+
+这里的transportFactory就是上面提到`io.grpc.ManagedChannelBuilder`调用`build`初始化时调用`buildTransportFactory`方法返回的，依赖于Transport层的具体实现。在netty实现中，返回的是`io.grpc.netty.NettyClientTransport`。
 
 ## 传输
 
@@ -1070,7 +1109,7 @@ SubchannelPicker pickerCopy = subchannelPicker;
 
 ### 首次访问服务端时执行`exidIdleMode`方法
 
-`exitIdleMode`方法会初始化NameResolver和LoadBalancer，并会启动NameResolverListener。
+`exitIdleMode`方法会初始化`NameResolver`和`LoadBalancer`，并会启动`NameResolverListener`。当解析完成后会调用`NameResolverListener`的`onResult`方法，进而调用`LoadBalancer`的`handleResolvedAddresses`方法创建subchannelPicker、创建并连接subchannel。
 
 ```
 @VisibleForTesting
@@ -1098,66 +1137,36 @@ void exitIdleMode() {
 }
 ```
 
-当`NameResolverListener`获取解析结果后会调用`onResult`方法，进而会调用`io.grpc.LoadBalancer`的`handleResolvedAddresses`方法，更新subchannelPicker并连接subchannel。
-![获取解析结果后调用handleResolvedAddresses方法](grpc-in-depth/call-handle-resolved-response.png)
+### Request
 
-在开启subchannel的连接过程中，会调用`io.grpc.internal.InternalSubchannel`的`obtainActiveTransport`方法。
+发送Request时会调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
 
+![调用newStream的调用栈](grpc-in-depth/calling-new-stream.png)
+
+在进行一系列http2设置后，会调用`io.grpc.internal.ClientStream`的`start`方法，为`TransportState`设置监听并通过`Sink`写入Header。
 ```
 @Override
-public ClientTransport obtainActiveTransport() {
-	ClientTransport savedTransport = activeTransport;
-	if (savedTransport != null) {
-		return savedTransport;
+public final void start(ClientStreamListener listener) {
+	transportState().setListener(listener);
+	if (!useGet) {
+		abstractClientStreamSink().writeHeaders(headers, null);
+		headers = null;
 	}
-	syncContext.execute(new Runnable() {
-		@Override
-		public void run() {
-			if (state.getState() == IDLE) {
-			  channelLogger.log(ChannelLogLevel.INFO, "CONNECTING as requested");
-			  gotoNonErrorState(CONNECTING);
-			  startNewTransport();
-			}
-		}
-	});
-	return null;
 }
 ```
 
-在`startNewTransport`中，会获取真正的`io.grpc.internal.ConnectionClientTransport`实现。
+初始化结束后，调用requestObserver的`onNext`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法，将protobuf对象转换成`InputStream`，并作为参数调用`io.grpc.internal.ClientStream`的`writeMessage`方法，进而调用`io.grpc.internal.MessageFramer`的`writePayload`方法，最终调用`writeToOutputStream`方法将内容写入Http的OutputStream。如果是参数是stream形式会继续调用flush。
 
-```
-ConnectionClientTransport transport =
-        new CallTracingTransport(
-            transportFactory
-                .newClientTransport(address, options, transportLogger), callsTracer);
-```
+调用requestObserver的`onCompleted`方法会调用`io.grpc.internal.ClientCallImpl`的`halfClose`方法，进而会调用`io.grpc.internal.MessageFramer`的`endOfMessages`，flush并结束发送消息。
 
-这里的transportFactory就是上面提到`io.grpc.ManagedChannelBuilder`调用`build`初始化时调用`buildTransportFactory`方法返回的，依赖于Transport层的具体实现。在netty实现中，返回的是`io.grpc.netty.NettyClientTransport`。
+### Response
 
-### 发送数据
+客户端接受到Response会调用ClientStreamListener的`messagesAvailable`方法，并通过同步线程池最终调用StreamObserver的`onNext`方法接收数据。
 
-在首次调用时，因为subchannel还未开启，非首次调用会直接调用`ConnectionClientTransport`的`newStream`方法返回一个`io.grpc.internal.ClientStream`对象,而首次调用会通过delayedTransport延迟调用`newStream`方法。netty实现会返回一个`io.grpc.netty.shaded.io.grpc.netty.NettyClientStream`对象。`io.grpc.internal.ClientStream`下有两个子类,`TransportState`负责处理传输状态，`Sink`负责写入数据。
-![调用newStream的调用栈](grpc-in-depth/calling-new-stream.png)
-在进行一系列http2设置后，会调用`io.grpc.internal.ClientStream`的`start`方法，为TransportState设置监听并通过Sink写入Header。
-```
-@Override
-  public final void start(ClientStreamListener listener) {
-    transportState().setListener(listener);
-    if (!useGet) {
-      abstractClientStreamSink().writeHeaders(headers, null);
-      headers = null;
-    }
-  }
-```
-初始化结束后，调用requestObserver的`onNext`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法，将protobuf对象转换成`InputStream`，并作为参数调用`io.grpc.internal.ClientStream`的writeMessage方法，进而调用`io.grpc.internal.MessageFramer`的`writePayload`方法，最终调用`writeToOutputStream`方法将内容写入Http的OutputStream。如果是参数是stream形式会继续调用flush。
-
-调用requestObserver的`onCompleted`方法会调用`io.grpc.internal.ClientCallImpl`的`sendMessage`方法`halfClose`方法，进而会调用`io.grpc.internal.MessageFramer`的`endOfMessages`，flush并结束发送消息。
-### 接受数据
-客户端接受到服务端返回的数据会调用ClientStreamListener的`messagesAvailable`方法，并通过同步线程池最终调用StreamObserver的`onNext`方法接收数据。
-当返回结束时会调用TransportState的`transportReportStatus`方法关闭连接，进而调用ClientStreamListener的`closed`方法关闭监听，进而调用StreamObserver的`onClose`方法。
+当返回结束时会调用TransportState的`transportReportStatus`方法关闭请求，进而调用ClientStreamListener的`closed`方法关闭监听，进而调用StreamObserver的`onClose`方法。
 
 ### gRPC通信格式
+
 gRPC发送的请求发送方法是POST，路径是/${serviceName}/${methodName},content-type为content-type = application/grpc+proto。
 
 #### Request
@@ -1189,10 +1198,283 @@ trace-proto-bin = jher831yy13JHy3hc
 ```
 # 扩展gRPC
 
-### 自定义基于Euraka的`NameResolver.Factory`实现
+### 自定义基于zookeeper的`NameResolver.Factory`实现
+```
+public class CuratorNameResolver extends NameResolver {
+	CuratorFramework curatorFramework;
+	String basePath;
+	String serviceAuthority;
+	private Listener2 listener;
 
+	public CuratorNameResolver(CuratorFramework curatorFramework, String basePath, String serviceAuthority) {
+		this.curatorFramework = curatorFramework;
+		this.basePath = basePath;
+		this.serviceAuthority = serviceAuthority;
+	}
+
+	@Override
+	public void start(Listener2 listener) {
+		this.curatorFramework.start();
+		this.listener = listener;
+		refresh();
+	}
+
+	@Override
+	public void refresh() {
+		List<EquivalentAddressGroup> servers = new ArrayList<>();
+		try {
+			List<EquivalentAddressGroup> addresses = curatorFramework.getChildren()
+					.forPath(basePath)
+					.stream().map(address ->{
+						try {
+							URI uri = new URI("http://" + address);
+							return new EquivalentAddressGroup(new InetSocketAddress(uri.getHost(), uri.getPort()));
+						}catch (Exception e){
+							listener.onError(Status.INTERNAL);
+							return null;
+						}
+					}).collect(Collectors.toList());
+			listener.onResult(ResolutionResult.newBuilder().setAddresses(addresses).build());
+
+		} catch (Exception e) {
+			listener.onError(Status.INTERNAL);
+		}
+	}
+
+	@Override
+	public String getServiceAuthority() {
+		return this.serviceAuthority;
+	}
+
+	@Override
+	public void shutdown() {
+		this.curatorFramework.close();
+	}
+
+	public static class Factory extends NameResolver.Factory{
+		@Override
+		public NameResolver newNameResolver(URI targetUri, Args args) {
+			String address = targetUri.getHost() + ":" + targetUri.getPort();
+			String authority = null == targetUri.getAuthority() ? address : targetUri.getAuthority();
+			CuratorFramework curator = CuratorFrameworkFactory.builder()
+					.connectString(address)
+					.retryPolicy(new ExponentialBackoffRetry(1000, 5))
+					.connectionTimeoutMs(1000)
+					.sessionTimeoutMs(60000)
+					.build();
+			return new CuratorNameResolver(curator, targetUri.getPath(), authority);
+		}
+
+		@Override
+		public String getDefaultScheme() {
+			return "zookeeper";
+		}
+	}
+}
+```
 ### 自定义随机负载均衡实现
 
+```
+public class RandomLoadBalancer extends LoadBalancer{
+	LoadBalancer.Helper helper;
+
+	private final Map<EquivalentAddressGroup, Subchannel> subchannels =
+			new HashMap<>();
+	static final Attributes.Key<Ref<ConnectivityStateInfo>> STATE_INFO =
+			Attributes.Key.create("state-info");
+
+	public RandomLoadBalancer(LoadBalancer.Helper helper) {
+		this.helper = helper;
+	}
+	@Override
+	public void handleResolvedAddresses(ResolvedAddresses resolvedAddresses) {
+		List<EquivalentAddressGroup> servers = resolvedAddresses.getAddresses();
+		for(EquivalentAddressGroup server : servers){
+			List<EquivalentAddressGroup> serverSingletonListt = Collections.singletonList(server);
+			Subchannel exists = subchannels.getOrDefault(server, null);
+			if(null != exists){
+				exists.updateAddresses(serverSingletonListt);
+				continue;
+			}
+			Attributes.Builder subchannelAttrs = Attributes.newBuilder()
+					.set(STATE_INFO,
+							new Ref<>(ConnectivityStateInfo.forNonError(IDLE)));
+			final Subchannel subchannel = helper.createSubchannel(CreateSubchannelArgs.newBuilder()
+							.setAddresses(serverSingletonListt)
+							.setAttributes(subchannelAttrs.build())
+							.build());
+			subchannels.put(server, subchannel);
+			subchannel.start(new SubchannelStateListener() {
+				@Override
+				public void onSubchannelState(ConnectivityStateInfo state) {
+					for(Map.Entry<EquivalentAddressGroup, Subchannel> entry : subchannels.entrySet()){
+						if(subchannel == entry.getValue()){
+							if (state.getState() == SHUTDOWN) {
+								subchannels.remove(entry.getKey());
+							}
+							if (state.getState() == IDLE) {
+								subchannel.requestConnection();
+							}
+							subchannel.getAttributes().get(STATE_INFO).value = state;
+							updateBalancingState();
+							return;
+						}
+					}
+				}
+			});
+			subchannel.requestConnection();
+		}
+		updateBalancingState();
+	}
+	@Override
+	public void handleNameResolutionError(Status error) {
+		shutdown();
+		helper.updateBalancingState(TRANSIENT_FAILURE, new SubchannelPicker() {
+			@Override
+			public PickResult pickSubchannel(PickSubchannelArgs args) {
+				return PickResult.withError(error);
+			}
+		});
+	}
+
+	private  void updateBalancingState(){
+		boolean ready = true;
+		for(Subchannel subchannel : this.subchannels.values()){
+			if(subchannel.getAttributes().get(STATE_INFO).value.getState() != READY){
+				helper.updateBalancingState(CONNECTING, new RandomSubchannelPick(subchannels.values()));
+				return;
+			}
+		}
+		helper.updateBalancingState(ConnectivityState.READY, new RandomSubchannelPick(subchannels.values()));
+	}
+
+	@Override
+	public void shutdown() {
+		for(Iterator<Map.Entry<EquivalentAddressGroup, Subchannel>> itr = subchannels.entrySet().iterator(); itr.hasNext();){
+			Map.Entry<EquivalentAddressGroup, Subchannel> e = itr.next();
+			e.getValue().shutdown();
+			itr.remove();
+		}
+
+	}
+
+	class RandomSubchannelPick extends SubchannelPicker{
+		Subchannel[] subchannels;
+		Random random = new Random(System.currentTimeMillis());
+
+		public RandomSubchannelPick(Collection<Subchannel> subchannels) {
+			this.subchannels = subchannels.stream().toArray(Subchannel[]::new);
+		}
+
+		@Override
+		public PickResult pickSubchannel(PickSubchannelArgs args) {
+			int idx = random.nextInt(subchannels.length);
+			return PickResult.withSubchannel(subchannels[idx]);
+		}
+	}
+
+	public static class Provider extends LoadBalancerProvider{
+
+		@Override
+		public boolean isAvailable() {
+			return true;
+		}
+
+		@Override
+		public int getPriority() {
+			return 100;
+		}
+
+		@Override
+		public String getPolicyName() {
+			return "random";
+		}
+
+		@Override
+		public LoadBalancer newLoadBalancer(LoadBalancer.Helper helper) {
+			return new RandomLoadBalancer(helper);
+		}
+	}
+
+	static final class Ref<T> {
+		T value;
+
+		Ref(T value) {
+			this.value = value;
+		}
+	}
+}
+```
+
+### 服务端初始化
+
+服务端需要把自己的服务地址注册到zookeeper。
+
+```
+private final int port;
+private final Server server;
+private String registryPath;
+private String address;
+CuratorFramework curator = CuratorFrameworkFactory.builder()
+		.connectString("127.0.0.1:2181")
+		.retryPolicy(new ExponentialBackoffRetry(1000, 5))
+		.connectionTimeoutMs(1000)
+		.sessionTimeoutMs(60000)
+		.build();;
+
+public GreetingServer(int port, String registryPath) throws IOException {
+	this.port = port;
+	server = ServerBuilder.forPort(port).addService(new GreetingService())
+			.build();
+	this.registryPath = registryPath;
+	this.address =  "localhost:" + port;    //本机网卡不能正确显示地址，直接写死localhost
+}
+
+/**
+ * Start server.
+ */
+public void start() throws Exception {
+	this.curator.start();
+	server.start();;
+	this.curator.create()
+			.creatingParentContainersIfNeeded()
+			.withMode(CreateMode.EPHEMERAL)
+			.forPath(registryPath + "/" + address, ("http://" + address).getBytes());
+
+	System.out.println("Server started, listening on " + address);
+	Runtime.getRuntime().addShutdownHook(new Thread() {
+		@Override
+		public void run() {
+			GreetingServer.this.stop();
+		}
+	});
+}
+```
+### 客户端初始化
+
+客户端需要注册自定义的NameResolverFactory和LoadBalancer。
+
+```
+public GreetingClient(String host, int port, String path) {
+	String target = "zookeeper://" + host + ":" + port + path;
+	CuratorNameResolver.Factory factory = new CuratorNameResolver.Factory();
+
+	LoadBalancerRegistry.getDefaultRegistry().register(new RandomLoadBalancer.Provider());
+	ManagedChannelBuilder<?> channelBuilder = ManagedChannelBuilder
+			.forTarget(target)
+			.nameResolverFactory(factory)
+			.defaultLoadBalancingPolicy("random")
+			.usePlaintext();
+	channel = channelBuilder.build();
+	blockingStub = GreetingGrpc.newBlockingStub(channel);
+}
+```
+ 
+# 参考资料
+
++ [示例代码](https://github.com/LiuMenghan/grpc-example)
++ [grpc-java源码地址](https://github.com/grpc/grpc-java)
++ [gRPC传输格式说明](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)
 
 
 
