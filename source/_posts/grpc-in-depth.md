@@ -1228,7 +1228,8 @@ public class CuratorNameResolver extends NameResolver {
 					.stream().map(address ->{
 						try {
 							URI uri = new URI("http://" + address);
-							return new EquivalentAddressGroup(new InetSocketAddress(uri.getHost(), uri.getPort()));
+							return new EquivalentAddressGroup(
+								new InetSocketAddress(uri.getHost(), uri.getPort()));
 						}catch (Exception e){
 							listener.onError(Status.INTERNAL);
 							return null;
