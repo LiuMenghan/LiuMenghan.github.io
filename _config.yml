@@ -5,10 +5,10 @@
 # Site
 title: 寒歌随笔
 subtitle:
-description:
-keywords:
+description: 互联网服务端技术架构研究
+keywords: Java,互联网,分布式,微服务
 author: Liu Menghan
-language:
+language: zh-CN
 timezone:
 
 # URL
@@ -73,7 +73,7 @@ pagination_dir: page
 # Extensions
 ## Plugins: https://hexo.io/plugins/
 ## Themes: https://hexo.io/themes/
-theme: landscape
+theme: next
 
 # Deployment
 ## Docs: https://hexo.io/docs/deployment.html
