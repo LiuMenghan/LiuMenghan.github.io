@@ -1,94 +1,614 @@
 <!DOCTYPE html>
-<html>
-<head><meta name="generator" content="Hexo 3.9.0">
-  <meta charset="utf-8">
-  
+
+
 
   
-  <title>寒歌随笔</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta property="og:type" content="website">
+
+
+<html class="theme-next mist use-motion" lang="zh-CN">
+<head><meta name="generator" content="Hexo 3.9.0">
+  <meta charset="UTF-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform">
+<meta http-equiv="Cache-Control" content="no-siteapp">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css">
+
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css">
+
+<link href="/css/main.css?v=5.1.4" rel="stylesheet" type="text/css">
+
+
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png?v=5.1.4">
+
+
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png?v=5.1.4">
+
+
+  <link rel="mask-icon" href="/images/logo.svg?v=5.1.4" color="#222">
+
+
+
+
+
+  <meta name="keywords" content="Hexo, NexT">
+
+
+
+
+
+
+
+
+
+
+<meta name="description" content="互联网服务端技术架构研究">
+<meta name="keywords" content="Java,互联网,分布式,微服务">
+<meta property="og:type" content="website">
 <meta property="og:title" content="寒歌随笔">
 <meta property="og:url" content="http://liumenghan.github.io/index.html">
 <meta property="og:site_name" content="寒歌随笔">
-<meta property="og:locale" content="default">
+<meta property="og:description" content="互联网服务端技术架构研究">
+<meta property="og:locale" content="zh-CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="寒歌随笔">
+<meta name="twitter:description" content="互联网服务端技术架构研究">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Mist',
+    version: '5.1.4',
+    sidebar: {"position":"left","display":"post","offset":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},
+    duoshuo: {
+      userId: '0',
+      author: 'Author'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://liumenghan.github.io/">
+
+
+
+
+
+  <title>寒歌随笔</title>
   
-    <link rel="alternate" href="/atom.xml" title="寒歌随笔" type="application/atom+xml">
-  
-  
-    <link rel="icon" href="/favicon.png">
-  
-  
-    <link href="//fonts.googleapis.com/css?family=Source+Code+Pro" rel="stylesheet" type="text/css">
-  
-  <link rel="stylesheet" href="/css/style.css">
+
+
+
+
+
+
+
+
 </head>
-</html>
-<body>
-  <div id="container">
-    <div id="wrap">
-      <header id="header">
-  <div id="banner"></div>
-  <div id="header-outer" class="outer">
-    <div id="header-title" class="inner">
-      <h1 id="logo-wrap">
-        <a href="/" id="logo">寒歌随笔</a>
-      </h1>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-CN">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left 
+  page-home">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/" class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">寒歌随笔</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
       
-    </div>
-    <div id="header-inner" class="inner">
-      <nav id="main-nav">
-        <a id="main-nav-toggle" class="nav-icon"></a>
-        
-          <a class="main-nav-link" href="/">Home</a>
-        
-          <a class="main-nav-link" href="/archives">Archives</a>
-        
-      </nav>
-      <nav id="sub-nav">
-        
-          <a id="nav-rss-link" class="nav-icon" href="/atom.xml" title="RSS Feed"></a>
-        
-        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
-      </nav>
-      <div id="search-form-wrap">
-        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://liumenghan.github.io"></form>
-      </div>
-    </div>
-  </div>
-</header>
-      <div class="outer">
-        <section id="main">
-  
-    <article id="post-grpc-in-depth" class="article article-type-post" itemscope itemprop="blogPost">
-  <div class="article-meta">
-    <a href="/2019/10/07/grpc-in-depth/" class="article-date">
-  <time datetime="2019-10-07T12:45:22.625Z" itemprop="datePublished">2019-10-07</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/Java/">Java</a>
+        <h1 class="site-subtitle" itemprop="description"></h1>
+      
   </div>
 
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
   </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="article-title" href="/2019/10/07/grpc-in-depth/">gRPC客户端详解</a>
-    </h1>
+</div>
+
+<nav class="site-nav">
   
 
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-Home"></i> <br>
+            
+            Home
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-关于"></i> <br>
+            
+            About
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-tags">
+          <a href="/tags/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-标签"></i> <br>
+            
+            Tags
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-分类"></i> <br>
+            
+            Categories
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-归档"></i> <br>
+            
+            Archives
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+  <section id="posts" class="posts-expand">
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://liumenghan.github.io/2020/01/01/how-to-write-a-extensible-template-engine-1-design/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Liu Menghan">
+      <meta itemprop="description" content>
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="寒歌随笔">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2020/01/01/how-to-write-a-extensible-template-engine-1-design/" itemprop="url">如何写一个易扩展的模版引擎（1）：设计</a></h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2020-01-01T19:16:56+08:00">
+                2020-01-01
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/javascript/" itemprop="url" rel="index">
+                    <span itemprop="name">javascript</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
       </header>
     
-    <div class="article-entry" itemprop="articleBody">
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
       
-        <p>作者：寒歌</p>
+      
+
+      
+        
+          
+            <p>作者：寒歌</p>
+<p><a href="https://github.com/LiuMenghan/Tirpitz" target="_blank" rel="noopener">轻量级高可扩展静态模板引擎Tirpitz：https://github.com/LiuMenghan/Tirpitz</a></p>
+<h1 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h1><p>这是一个四年前的项目，起因是当时跟风学习node.js，但是当了解到当时node.js单线程异步的奇怪设计之后，我就放弃了在生产环境服务端使用node.js的想法（就像现在我看到Rust不支持反射，就放弃了用Rust写业务逻辑的想法）。但是node.js不适合在大型互联网公司生产环境服务端使用，并不意味着node.js这门技术就没有合适的使用场景。node.js由于使用了javascript作为编程语言，非常适合作为前端转型全栈工程师的中间环节，一些重心在前端但是需要服务端技术支持的功能都非常适合用node.js开发，比如：</p>
+<ul>
+<li>以展示为主、轻后端重前端的小型网站；</li>
+<li>前端开发接口Mock;</li>
+<li>模版引擎。</li>
+</ul>
+<p>几个里面相对来说看上去比较有挑战性的就是模版引擎，所以就打算自己写个模版引擎来练练手。在阅读了FreeMarker、Velocity、Thymeleaf、StringTemplate等一系列模版引擎的使用文档和源码之后，对模版引擎有了以下总结：</p>
+<ol>
+<li>模板引擎是用来生成文档的工具；</li>
+<li>大多数人对文档的理解都是一种类似目录的树形结构；</li>
+<li>模板引擎最大的作用是代替程序员进行重复劳动（如banner、Copyright）,让程序员可以更关注于整体结构和特殊的内容细节；</li>
+<li>性能其实没那么重要，如果由模版引擎实时生成文档难以满足生产环境的需求，最终不可避免的会改为预先由模版引擎生成静态文档、生产环境直接使用静态文档的技术方案，这种情况下模版引擎的性能只需要满足开发调试的需求就可以了；</li>
+<li>扩展性很重要，缺乏扩展性（无法扩展，或者开发扩展插件的代价较高）会促使程序员使用各种各样奇怪的hacker技术，反过来由于开源社区的反馈机制又会使模版引擎朝着奇怪的方向发展，最终使模版引擎难以使用。</li>
+</ol>
+<p>所以最终定下的目标是基于node.js开发一个高度可扩展，但是性能（空间、时间）没那么好的模版引擎。</p>
+<p><em>由于编程习惯，设计上是按照强类型设计的。由于javascript是弱类型，所以部分代码通过java来进行描述，但实际都是通过弱类型的javascript实现的。</em></p>
+<h1 id="总体设计"><a href="#总体设计" class="headerlink" title="总体设计"></a>总体设计</h1><p>模版语言与普通程序语言不同，相对缺少时间上的先后顺序概念。大多数模版引擎以标签方式标记模版逻辑，每个模板文件的渲染过程都可以分为两步：</p>
+<ol>
+<li>将模板文件解析成一棵标签树；</li>
+<li>遍历每个标签节点并执行对应标签逻辑。</li>
+</ol>
+<blockquote>
+<p>模版文件 -&gt; 标签树 -&gt; 遍历标签树处理标签逻辑 -&gt; 生成文档</p>
+</blockquote>
+<h2 id="主要扩展点"><a href="#主要扩展点" class="headerlink" title="主要扩展点"></a>主要扩展点</h2><p>上面四个节点，最好都具有一定的可扩展性。</p>
+<ul>
+<li>模版文件是用户自己编写的，自然是容易扩展的。</li>
+<li>标签树作为一种数据结构，应该允许存储用户自定义的一些参数。</li>
+<li>用户应该可以方便的自定义标签及标签处理逻辑，标签需要有一些和标签处理逻辑相关的属性，同时用户应该也可以自定义标签符号、转义符号、属性的赋值符号。</li>
+<li>由于文档用处不同（如输出到文件/控制台/http流），由处理后的标签树生成文档这步应该也是可以由用户根据需求自定义的。</li>
+</ul>
+<h2 id="AOP扩展点"><a href="#AOP扩展点" class="headerlink" title="AOP扩展点"></a>AOP扩展点</h2><p>模版引擎处理流程中的三个箭头都可以作为AOP扩展点。</p>
+<p>模版文件到标签树的切面，可以用来自定义添加标签，应作为一个扩展点保留。</p>
+<p>标签树到遍历标签树处理标签逻辑的切面，实现的流程上应该是：</p>
+<blockquote>
+<p>遍历标签树 -&gt; 找到满足切面条件的扩展点 -&gt; 执行AOP逻辑</p>
+</blockquote>
+<p>这个逻辑与自定义标签的处理逻辑几乎完全相同，所以就不需要保留了。</p>
+<p>处理标签逻辑到生成文档的切面，可以用来做一些最终文本的处理工作(如敏感词过滤)，应作为一个扩展点保留。</p>
+<p>这样一共增加了两个扩展点，分别为前置拦截器和后置拦截器，处理流程变成下面这个样子：</p>
+<blockquote>
+<p>模版文件 -&gt; 前置拦截器 -&gt; 标签树 -&gt; 遍历标签树处理标签逻辑 -&gt; 后置拦截器 -&gt; 生成文档</p>
+</blockquote>
+<h1 id="详细设计"><a href="#详细设计" class="headerlink" title="详细设计"></a>详细设计</h1><h2 id="模版文件的标签设计"><a href="#模版文件的标签设计" class="headerlink" title="模版文件的标签设计"></a>模版文件的标签设计</h2><p>模板文件的内容包括两部分：普通文本和标签。标签的结构设计最好方便标签树的生成，同时标签需要存储一些和标签处理逻辑相关的属性。这种思路典型的实现就是XML格式。XML的标签有三组：</p>
+<ul>
+<li><code>&lt;</code>和<code>&gt;</code>组成开始标签；</li>
+<li><code>&lt;/</code>和<code>&gt;</code>组成结束标签，和开始标签成对出现;</li>
+<li><code>&lt;</code>和<code>/&gt;</code>组成独立标签。</li>
+</ul>
+<p>鉴于模版文件肯定会广泛应用于类XML的HTML文件生成，所以最好不要直接使用XML的标签定义，模仿一下，修改成:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">exports.starterTag = [&quot;&#123;%&quot;, &quot;%&#125;&quot;];	//开始标签</span><br><span class="line">exports.endTag = [&quot;&#123;%/&quot;, &quot;%&#125;&quot;];	//结束标签</span><br><span class="line">exports.singleTag = [&quot;&#123;%&quot;, &quot;/%&#125;&quot;];	//独立标签</span><br></pre></td></tr></table></figure>
+
+<p>虽然标签的属性通常是结构化的，但是非结构化的需求可能也潜在存在，同时考虑到方便node.js解析，所以标签属性定义成json形式。</p>
+<p>最终设计出来的标签是这个样子的：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">&#123;%variable=&#123;&quot;key&quot;:&quot;date&quot;&#125; /%&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="前置拦截器"><a href="#前置拦截器" class="headerlink" title="前置拦截器"></a>前置拦截器</h2><p>前置拦截器的输入和输出应该一致，都是字符串。前置拦截方法定义为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">String before(String context);</span><br></pre></td></tr></table></figure>
+
+<p>前置拦截器的执行顺序应该由用户自己决定。</p>
+<h2 id="解析器"><a href="#解析器" class="headerlink" title="解析器"></a>解析器</h2><p>由于标签参考了XML设计，实现上可以参考XML的解析设计。具体比较复杂，下一章单独讨论。</p>
+<h2 id="模版标签树节点"><a href="#模版标签树节点" class="headerlink" title="模版标签树节点"></a>模版标签树节点</h2><p>节点是模版引擎最重要的数据结构。从标签定义可以看出，至少需要有两个属性：标签名称和属性。同时，作为一棵树，考虑到遍历需求，需要有子节点数组、父节点引用。最后，这棵树中最多的节点肯定是普通文本节点，所以最好添加一个<code>text</code>属性保存文本。</p>
+<p>模板标签树节点应该定义成这样:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">class TemplateNode&#123;</span><br><span class="line">	String processorName;</span><br><span class="line">	String text;</span><br><span class="line">	TemplateNode parent;</span><br><span class="line">	TemplateNode[] children;</span><br><span class="line">	Map&lt;String, Object&gt; attribute;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="标签处理器"><a href="#标签处理器" class="headerlink" title="标签处理器"></a>标签处理器</h2><p>最常见的标签毫无疑问是纯文本标签，通过将标签名称默认为空，不进行任何处理，就实现了纯文本标签的处理逻辑。其它标签处理器的抽象是其实是一件比较困难的事情，后面关于标签处理器的定义可能还要修改。开发的时候从常用标签处理器着手，实现了两个最常用的标签处理器：插值和继承。</p>
+<h3 id="插值处理器"><a href="#插值处理器" class="headerlink" title="插值处理器"></a>插值处理器</h3><p>插值处理器的作用是将变量替换为外部配置好的值，那么输入参数至少有两个：当前节点和外部字典表。根据<code>node.attribute.key</code>的值从字典表中取出对应的值并替换text。</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">exports.processorName = &quot;variable&quot;;</span><br><span class="line">exports.process = function(node, tplPath, parser, variables)&#123;</span><br><span class="line"></span><br><span class="line">	var key = node.attribute.key;</span><br><span class="line">	if(key !=  undefined &amp;&amp; null != key)&#123;</span><br><span class="line">		var value = variables[key];</span><br><span class="line">		node.text = value == undefined || null == value ? &quot;&quot; : value + &quot;&quot;;</span><br><span class="line">	&#125;</span><br><span class="line">	node.processorName = &quot;&quot;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>处理结束后将标签名称赋值为空，标识着标签处理逻辑结束，标签转换为纯被文本标签。</p>
+<h3 id="继承处理器"><a href="#继承处理器" class="headerlink" title="继承处理器"></a>继承处理器</h3><p>继承处理器比较复杂，它允许两个模版文件按一定规则组合起来，比如父模版文件为:</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Super head</span><br><span class="line">&#123;%replacable=&#123;&quot;id&quot;:&quot;replacer0&quot;&#125; /%&#125;</span><br><span class="line">Super body</span><br><span class="line">&#123;%replacable=&#123;&quot;id&quot;:&quot;replacer1&quot;&#125; /%&#125;</span><br><span class="line">Super bottom</span><br></pre></td></tr></table></figure>
+
+<p>子模版文件为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">Child text before super.</span><br><span class="line">&#123;%super=&#123;&quot;parent&quot;:&quot;./super.tirpitz&quot;&#125;%&#125;</span><br><span class="line">	&#123;%override=&#123;&quot;id&quot;:&quot;replacer0&quot;&#125;%&#125;Text in child replacer0.&#123;%/override%&#125;</span><br><span class="line">	&#123;%override=&#123;&quot;id&quot;:&quot;replacer1&quot;&#125;%&#125;Text in child replacer1.&#123;%/override%&#125;</span><br><span class="line">&#123;%/super%&#125;</span><br><span class="line">Child text after super.</span><br></pre></td></tr></table></figure>
+
+<p>子模版文件中的<code>super</code>块会被替换成父模版文件的内容，而且父模版文件当中的<code>replacable</code>块会被替换成和子模版文件中<code>override</code>块<code>id</code>一致的内容。编译子模版的输出内容如下：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Child text before super.</span><br><span class="line">Super head</span><br><span class="line">Text in child replacer0</span><br><span class="line">Super body</span><br><span class="line">Text in child replacer1.</span><br><span class="line">Super bottom</span><br><span class="line">Child text after super.</span><br></pre></td></tr></table></figure>
+
+<p><code>super</code>标签处理器的参数至少需要有三个：</p>
+<ul>
+<li>当前节点；</li>
+<li>当前解析模版文件路径（用于查找父模版）；</li>
+<li>解析器（用于解析父模版)</li>
+</ul>
+<p>处理过程如下（其中<code>Util.traverseNodeTree</code>是一个深度遍历树的工具方法）：</p>
+<ol>
+<li>获取可以替换的<code>override</code>子节点;</li>
+<li>获取并解析父模版；</li>
+<li>将父模版中的<code>replacable</code>子节点替换为<code>override</code>节点；</li>
+<li>将当前节点的子节点替换为父模版节点的子节点；</li>
+<li>将标签名称赋值为空，标识着标签处理逻辑结束，标签转换为纯被文本标签。。</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><span class="line">var Util = require(&apos;../util.js&apos;);</span><br><span class="line">exports.processorName = &quot;super&quot;;</span><br><span class="line">exports.process = function(node, tplPath, parser, variables)&#123;	</span><br><span class="line">	var children = node.children;</span><br><span class="line">	var replacer = &#123;&#125;;</span><br><span class="line">	for(var i = 0; i &lt; children.length ; i++)&#123;</span><br><span class="line">		var child = children[i];</span><br><span class="line">		Util.traverseNodeTree(child, tplPath, function(node, superPath)&#123;</span><br><span class="line">			if(&quot;override&quot; == node.processorName)&#123;</span><br><span class="line">				replacer[node.attribute.id] = node;</span><br><span class="line">			&#125;else if(&quot;super&quot; == node.processorName)&#123;</span><br><span class="line">				node.attribute.parent = Path.resolve(Path.dirname(tplPath), node.attribute.parent);</span><br><span class="line">			&#125;</span><br><span class="line">		&#125;);</span><br><span class="line">	&#125;</span><br><span class="line">	</span><br><span class="line">	//获取父模版</span><br><span class="line">	var superPath = Path.resolve(Path.dirname(tplPath), node.attribute.parent);</span><br><span class="line">	console.log(superPath);</span><br><span class="line">	var superContext = Fs.readFileSync(superPath, parser.encoding);</span><br><span class="line">	var superNode = parser.parse2node(superContext, superPath);</span><br><span class="line">	</span><br><span class="line">	Util.traverseNodeTree(superNode, superPath, function(node, superPath)&#123;</span><br><span class="line">		if(&quot;super&quot; == node.processorName)&#123;</span><br><span class="line">			var relativePath = node.attribute.parent;</span><br><span class="line">			//路径改为绝对路径，以解决多级嵌套的问题</span><br><span class="line">			node.attribute.parent = Path.resolve(Path.dirname(superPath), relativePath);</span><br><span class="line">		&#125;else if(node.processorName == &quot;replacable&quot;)&#123;</span><br><span class="line">			//替换</span><br><span class="line">			if(undefined != replacer[node.attribute.id])&#123;</span><br><span class="line">				node.processorName = &quot;&quot;;</span><br><span class="line">				node.children = replacer[node.attribute.id].children;			</span><br><span class="line">			&#125;else&#123;</span><br><span class="line">				node.processorName = &quot;&quot;;				</span><br><span class="line">			&#125;			</span><br><span class="line">		&#125;</span><br><span class="line">	&#125;);</span><br><span class="line">	node.parentNode.children[node.parentIdx].children = superNode.children;</span><br><span class="line">	node.parentNode.children[node.parentIdx].processorName = &quot;&quot;;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="后置拦截器"><a href="#后置拦截器" class="headerlink" title="后置拦截器"></a>后置拦截器</h2><p>后置拦截器的输入是标签树根节点，因为多个后置拦截器都是在同一棵树上进行连续操作，所以不需要返回值。后置拦截方法定义为：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">void after(TemplateNode root);</span><br></pre></td></tr></table></figure>
+
+<p>后置拦截器的执行顺序应该由用户自己决定。</p>
+<h2 id="生成文档"><a href="#生成文档" class="headerlink" title="生成文档"></a>生成文档</h2><p>生成文档的过程实际上通过深度遍历树，将各节点的<code>text</code>值输出到控制台/文件/http response的过程。生成文档的过程也应该可以由用户自己定义，以输出到控制台为例：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">exports.handle = function(node, tplPath, logger, starttime)&#123;</span><br><span class="line">	var wholeText = &quot;&quot;;</span><br><span class="line">	util.traverseNodeTree(node, logger, function(textNode, logger)&#123;</span><br><span class="line">		wholeText += textNode.text;</span><br><span class="line">	&#125;);</span><br><span class="line">	logger.log(wholeText);</span><br><span class="line">	var endtime = new Date().getTime();			</span><br><span class="line">	console.log(&quot;Parse &quot; + tplPath + &quot; to console.(&quot; + (endtime - starttime) + &quot; milliseconds)&quot;);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h1 id="封装及文档撰写"><a href="#封装及文档撰写" class="headerlink" title="封装及文档撰写"></a>封装及文档撰写</h1><p>模板解析器里面可以由用户自定义的部分很多，加载用户自定义的内容应遵循“约定优于配置”的规则。用户使用大体步骤分两步：</p>
+<ol>
+<li>初始化模板引擎;</li>
+<li>通过引擎渲染模板文件。</li>
+</ol>
+<p>常用配置可以通过在初始化模版引擎的时候配置，并在文档中注明，方便新手用户使用。</p>
+<p><a href="https://github.com/LiuMenghan/Tirpitz" target="_blank" rel="noopener">轻量级高可扩展静态模板引擎Tirpitz：https://github.com/LiuMenghan/Tirpitz</a></p>
+
+          
+        
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+    
+      
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://liumenghan.github.io/2019/10/07/grpc-in-depth/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Liu Menghan">
+      <meta itemprop="description" content>
+      <meta itemprop="image" content="/images/avatar.gif">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="寒歌随笔">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h2 class="post-title" itemprop="name headline">
+                
+                <a class="post-title-link" href="/2019/10/07/grpc-in-depth/" itemprop="url">gRPC客户端详解</a></h2>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">Posted on</span>
+              
+              <time title="Post created" itemprop="dateCreated datePublished" datetime="2019-10-07T20:45:22+08:00">
+                2019-10-07
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category">
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">In</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Java/" itemprop="url" rel="index">
+                    <span itemprop="name">Java</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        
+          
+            <p>作者：寒歌</p>
 <h1 id="RPC框架的选择"><a href="#RPC框架的选择" class="headerlink" title="RPC框架的选择"></a>RPC框架的选择</h1><p>常见的RPC框架主要分为轻重两种。较轻的框架一般只负责通信，如rmi、webservice、restful、Thrift、gRPC等。较重的框架一般包括完整的服务发现、负载均衡策略等等如BAT三家的Dubbo、brpc、Tars之类。</p>
 <p>框架选择时个人认为首先要考虑的是框架的历史和项目的活跃程度。一个历史悠久的活跃项目（大概至少可以保证每两到三个月有一次小版本的更新）可以保证各种bug早已暴露并修复，让我们可以更专注于我们自己的项目本身，而不是要担心究竟是我们自己的代码有问题还是框架本身就有问题。</p>
 <p>重量级RPC框架有一个主要问题就是结构复杂，另外主语言之外的代码质量也不太容易保证。个人认为活跃的社区以及一个活跃的开源管理团队是这些重型RPC框架项目成功的必要前提条件。比如我们项目组试用过腾讯的Tars，C++同学表示没有任何问题，然后JAVA同学表示java版本有许多bug，修复bug的pull request需要两个多月才能得到merge，而官方jar包也将近两年没有更新过了。</p>
@@ -254,114 +774,350 @@
 <li><a href="https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md" target="_blank" rel="noopener">gRPC传输格式说明</a></li>
 </ul>
 
+          
+        
       
     </div>
-    <footer class="article-footer">
-      <a data-url="http://liumenghan.github.io/2019/10/07/grpc-in-depth/" data-id="ck1gesof80000hwpvrz66eky7" class="article-share-link">Share</a>
-      
-      
-  <ul class="article-tag-list"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RPC/">RPC</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/gRPC/">gRPC</a></li></ul>
+    
+    
+    
 
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+
+      
+
+      
+
+      
+      
+        <div class="post-eof"></div>
+      
     </footer>
   </div>
   
-</article>
+  
+  
+  </article>
 
+
+    
+  </section>
 
   
 
 
-</section>
+          </div>
+          
+
+
+          
+
+        </div>
         
-          <aside id="sidebar">
+          
   
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Categories</h3>
-    <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/Java/">Java</a></li></ul>
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
     </div>
   </div>
 
-
-  
+  <aside id="sidebar" class="sidebar">
     
-  <div class="widget-wrap">
-    <h3 class="widget-title">Tags</h3>
-    <div class="widget">
-      <ul class="tag-list"><li class="tag-list-item"><a class="tag-list-link" href="/tags/RPC/">RPC</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gRPC/">gRPC</a></li></ul>
+    <div class="sidebar-inner">
+
+      
+
+      
+
+      <section class="site-overview-wrap sidebar-panel sidebar-panel-active">
+        <div class="site-overview">
+          <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+            
+              <p class="site-author-name" itemprop="name">Liu Menghan</p>
+              <p class="site-description motion-element" itemprop="description"></p>
+          </div>
+
+          <nav class="site-state motion-element">
+
+            
+              <div class="site-state-item site-state-posts">
+              
+                <a href="/archives/">
+              
+                  <span class="site-state-item-count">2</span>
+                  <span class="site-state-item-name">posts</span>
+                </a>
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-categories">
+                
+                  <span class="site-state-item-count">3</span>
+                  <span class="site-state-item-name">categories</span>
+                
+              </div>
+            
+
+            
+              
+              
+              <div class="site-state-item site-state-tags">
+                
+                  <span class="site-state-item-count">5</span>
+                  <span class="site-state-item-name">tags</span>
+                
+              </div>
+            
+
+          </nav>
+
+          
+
+          
+
+          
+          
+
+          
+          
+
+          
+
+        </div>
+      </section>
+
+      
+
+      
+
     </div>
-  </div>
+  </aside>
 
 
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Tag Cloud</h3>
-    <div class="widget tagcloud">
-      <a href="/tags/RPC/" style="font-size: 10px;">RPC</a> <a href="/tags/gRPC/" style="font-size: 10px;">gRPC</a>
-    </div>
-  </div>
-
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Archives</h3>
-    <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li></ul>
-    </div>
-  </div>
-
-
-  
-    
-  <div class="widget-wrap">
-    <h3 class="widget-title">Recent Posts</h3>
-    <div class="widget">
-      <ul>
-        
-          <li>
-            <a href="/2019/10/07/grpc-in-depth/">gRPC客户端详解</a>
-          </li>
-        
-      </ul>
-    </div>
-  </div>
-
-  
-</aside>
         
       </div>
-      <footer id="footer">
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <div class="copyright">&copy; <span itemprop="copyrightYear">2020</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Liu Menghan</span>
+
   
-  <div class="outer">
-    <div id="footer-info" class="inner">
-      &copy; 2019 Liu Menghan<br>
-      Powered by <a href="http://hexo.io/" target="_blank">Hexo</a>
-    </div>
-  </div>
-</footer>
-    </div>
-    <nav id="mobile-nav">
-  
-    <a href="/" class="mobile-nav-link">Home</a>
-  
-    <a href="/archives" class="mobile-nav-link">Archives</a>
-  
-</nav>
+</div>
+
+
+  <div class="powered-by">Powered by <a class="theme-link" target="_blank" href="https://hexo.io">Hexo</a></div>
+
+
+
+  <span class="post-meta-divider">|</span>
+
+
+
+  <div class="theme-info">Theme &mdash; <a class="theme-link" target="_blank" href="https://github.com/iissnan/hexo-theme-next">NexT.Mist</a> v5.1.4</div>
+
+
+
+
+        
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
     
 
-<script src="//ajax.googleapis.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
-
-
-  <link rel="stylesheet" href="/fancybox/jquery.fancybox.css">
-  <script src="/fancybox/jquery.fancybox.pack.js"></script>
-
-
-<script src="/js/script.js"></script>
-
-
+    
 
   </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+  
+
+  
+  
+    <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+  
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.4"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.4"></script>
+
+
+
+  
+  
+
+  
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.4"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+  
+  
+  <link rel="stylesheet" href="/lib/needsharebutton/needsharebutton.css">
+
+  
+  
+  <script src="/lib/needsharebutton/needsharebutton.js"></script>
+
+  <script>
+    
+      pbOptions = {};
+      
+          pbOptions.iconStyle = "box";
+      
+          pbOptions.boxForm = "horizontal";
+      
+          pbOptions.position = "bottomCenter";
+      
+          pbOptions.networks = "Weibo,Wechat,Douban,QQZone,Twitter,Facebook";
+      
+      new needShareButton('#needsharebutton-postbottom', pbOptions);
+    
+    
+  </script>
+
+  
+
+  
+
+  
+
+  
+
 </body>
 </html>
