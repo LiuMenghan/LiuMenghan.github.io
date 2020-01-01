@@ -8,7 +8,7 @@ categories:
 ---
 作者：寒歌
 
-项目地址：[轻量级高可扩展静态模板引擎Tirpitz](https://github.com/LiuMenghan/Tirpitz)
+[轻量级高可扩展静态模板引擎Tirpitz：https://github.com/LiuMenghan/Tirpitz](https://github.com/LiuMenghan/Tirpitz)
 
 # 前言
 
@@ -18,7 +18,7 @@ categories:
 - 前端开发接口Mock;
 - 模版引擎。
 
-几个里面相对来说看上去比较有挑战性的就是模版引擎，所以就打算自己写个模版引擎来练练手。在阅读了FreeMarker、Velocity、Thymeleaf、StringTemplate、AngularJS等一些列前后端模版引擎的使用文档和源码之后，对模版引擎有了以下总结：
+几个里面相对来说看上去比较有挑战性的就是模版引擎，所以就打算自己写个模版引擎来练练手。在阅读了FreeMarker、Velocity、Thymeleaf、StringTemplate等一系列模版引擎的使用文档和源码之后，对模版引擎有了以下总结：
 
 1. 模板引擎是用来生成文档的工具；
 2. 大多数人对文档的理解都是一种类似目录的树形结构；
@@ -43,13 +43,10 @@ categories:
 
 上面四个节点，最好都具有一定的可扩展性。
 
-模版文件是用户自己编写的，自然是容易扩展的。
-
-标签树作为一种数据结构，应该允许存储用户自定义的一些参数。
-
-用户应该可以方便的自定义标签及标签处理逻辑，标签需要有一些和标签处理逻辑相关的属性，同时用户应该也可以自定义标签符号、转义符号、属性的赋值符号。
-
-由于文档用处不同（如输出到文件/控制台/http流），由处理后的标签树生成文档这步应该也是可以由用户根据需求自定义的。
+- 模版文件是用户自己编写的，自然是容易扩展的。
+- 标签树作为一种数据结构，应该允许存储用户自定义的一些参数。
+- 用户应该可以方便的自定义标签及标签处理逻辑，标签需要有一些和标签处理逻辑相关的属性，同时用户应该也可以自定义标签符号、转义符号、属性的赋值符号。
+- 由于文档用处不同（如输出到文件/控制台/http流），由处理后的标签树生成文档这步应该也是可以由用户根据需求自定义的。
 
 ## AOP扩展点
 
@@ -266,4 +263,4 @@ exports.handle = function(node, tplPath, logger, starttime){
 
 常用配置可以通过在初始化模版引擎的时候配置，并在文档中注明，方便新手用户使用。
 
-项目地址：[轻量级高可扩展静态模板引擎Tirpitz](https://github.com/LiuMenghan/Tirpitz)
+[轻量级高可扩展静态模板引擎Tirpitz：https://github.com/LiuMenghan/Tirpitz](https://github.com/LiuMenghan/Tirpitz)
